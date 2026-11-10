@@ -1,0 +1,12 @@
+Swift-MCP-Server-HTTP
+Original implementation: Apache License, Version 2.0.
+
+Tools/Conformance/SwiftFixture adapts synthetic registration names, URIs, payload
+constants and observable behaviors from the public @modelcontextprotocol/conformance
+0.2.0-alpha.12 everything-server and scenario sources at
+f44482ba17df816d3176962a11cdf36aec9bda00. Its original Swift glue is Apache-2.0; the
+complete upstream license is retained as Tools/Conformance/SwiftFixture/UPSTREAM_LICENSE.
+No upstream protocol, client or JSON engine is copied. See its PROVENANCE.md.
+
+Tests/MCPHTTPTests/Resources contains a self-signed test certificate and key generated
+for tests only.

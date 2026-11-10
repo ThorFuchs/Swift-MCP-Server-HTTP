@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+node_modules/
+*.xcuserstate
+.DS_Store
+__pycache__/
+*.pyc
+build.log
+test.log
