@@ -2,6 +2,7 @@
 import Foundation
 import Darwin
 import ConformanceFixture
+import MCPTasks
 import Logging
 import MCPHTTP
 import MCPServiceLifecycle
@@ -22,7 +23,16 @@ import ServiceLifecycle
             do { try await fixture.transport.run { bound in address.continuation.yield(bound); try await ready() } }
             catch is CancellationError { }
         }, shutdown: { await fixture.transport.shutdown() })
-        let service = try ServerService(server: fixture.server, components: [component])
+        // The Tasks runtime owns all task work; cancelling it cancels and joins that work.
+        let tasks = try TransportService(name: "tasks-runtime", run: { ready in
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await FixtureTasks.runtime.run() }
+                while !(await FixtureTasks.runtime.isRunning) { await Task.yield() }
+                try await ready()
+                try await group.waitForAll()
+            }
+        }, shutdown: { await FixtureTasks.runtime.shutdown() })
+        let service = try ServerService(server: fixture.server, components: [tasks, component])
         let logger = Logger(label: "referee-fixture", factory: { _ in SwiftLogNoOpLogHandler() })
         // Process signals are owned only by this standalone executable. Preserve
         // D29's nil candidate timers; the production service owns finite drain.

@@ -33,9 +33,10 @@ done
 url="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["nonce"]==sys.argv[2]; print(d["url"])' "$work/ready.json" "$nonce")"
 echo "fixture ready at $url"
 
-# 4. Referee run, then an independent summary of every scenario's checks.
+# 4. Referee run, then an independent summary of every scenario's checks. The fixture is a
+#    debug build; catalog mutations re-prepare schemas, so scenarios get 90 s instead of 30 s.
 set +e
-"$referee" server --url "$url" --requirements 2026-07-28 --output-dir "$out/results" --timeout 30000 > "$out/referee.stdout" 2> "$out/referee.stderr"
+"$referee" server --url "$url" --requirements 2026-07-28 --output-dir "$out/results" --timeout 90000 > "$out/referee.stdout" 2> "$out/referee.stderr"
 referee_exit=$?
 set -e
 python3 -I "$root/Scripts/conformance_summary.py" "$out/results" "$referee_exit"

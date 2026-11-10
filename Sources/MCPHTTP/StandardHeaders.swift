@@ -100,6 +100,13 @@ public struct HeaderFields: Sendable {
         return matches.first?.value
     }
 
+    /// The params field mirrored into `Mcp-Name` for a method: the core methods' name
+    /// fields, and `taskId` for the Tasks extension's `tasks/get|update|cancel`.
+    public static func mirroredNameField(for method: String) -> String? {
+        if let wireMethod = WireMethod(rawValue: method) { return wireMethod.mirroredNameField }
+        return ["tasks/get", "tasks/update", "tasks/cancel"].contains(method) ? "taskId" : nil
+    }
+
     /// The dispatcher supplies the exact decoded version/method/name from the body.
     public func validateMirrors(version: String, method: String, name: String?) throws {
         for (header, expected, encoded) in [
@@ -109,7 +116,7 @@ public struct HeaderFields: Sendable {
             let actual = encoded ? try HeaderMirror.decode(raw) : raw
             guard actual.utf8.elementsEqual(expected.utf8) else { throw HeaderFailure.mismatch }
         }
-        if let wireMethod = WireMethod(rawValue: method), wireMethod.mirroredNameField != nil {
+        if Self.mirroredNameField(for: method) != nil {
             guard let name, let raw = try value("Mcp-Name") else { throw HeaderFailure.missing }
             guard try HeaderMirror.decode(raw).utf8.elementsEqual(name.utf8) else { throw HeaderFailure.mismatch }
         }
