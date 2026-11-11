@@ -25,8 +25,11 @@ jobs:
       - run: swift --version
       - run: Scripts/test.sh
       - run: Scripts/conformance.sh "$RUNNER_TEMP/conformance"
+      - run: Scripts/client-conformance.sh "$RUNNER_TEMP/client-conformance"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: conformance
-          path: ${{ runner.temp }}/conformance
+          path: |
+            ${{ runner.temp }}/conformance
+            ${{ runner.temp }}/client-conformance
