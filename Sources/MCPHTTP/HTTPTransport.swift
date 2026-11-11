@@ -257,7 +257,12 @@ private struct MCPHTTPRequestHandler: HTTPServerRequestHandler {
                 response = try .init(status:rejection.statusCode,fields:rejection == .methodNotAllowed ? [.init("Allow","POST")] : [])
             } else if error is HeaderFailure { response = try .init(status:400) }
             else { throw error }
-            try await response.send(responseSender)
+            // A rejection before the body was read leaves it on the connection, so the
+            // connection cannot carry another request. Say so instead of letting a client
+            // reuse it and fail ("other side closed"), then end it deliberately.
+            let unread = reader != nil
+            try await response.send(responseSender, closing:unread)
+            if unread { throw HTTPConnectionComplete() }
         }
     }
     private func authenticate(_ access:any HTTPAccessPolicy,headers:HeaderFields) async throws -> VerifiedPrincipal {
