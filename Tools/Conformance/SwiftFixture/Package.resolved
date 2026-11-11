@@ -1,5 +1,5 @@
 {
-  "originHash" : "2f95c0412cdeed05218bafcf1b297f56c94a97ce719535cf31a926932f11e3da",
+  "originHash" : "8bea3a68eb07398bf98306b106a1825d9ba6ec51c020c35fa5bbf366f4d0dd7e",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -149,7 +149,7 @@
       "location" : "https://github.com/ThorFuchs/Swift-MCP-Server.git",
       "state" : {
         "branch" : "main",
-        "revision" : "b224fb2be7c7f71a5e35c2b7b03739a6dc924050"
+        "revision" : "5bb0652de46b760ddcbf24305fefa545a2ec3a7f"
       }
     },
     {
