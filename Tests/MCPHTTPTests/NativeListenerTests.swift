@@ -483,6 +483,9 @@ private func waitHTTP(_ condition:@escaping @Sendable () async -> Bool,milliseco
                 try socket.send(Data("POST /mcp HTTP/1.1\r\nHost: localhost\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMCP-Protocol-Version: 2026-07-28\r\nMcp-Method: tools/list\r\n\(extra)Content-Length: \(body.count)\r\n\r\n".utf8)+body)
                 let result = String(decoding:try await socket.receive(until:status == 400 ? "0\r\n\r\n" : nil),as:UTF8.self)
                 #expect(result.contains("\(status)"))
+                // Rejected before the body was read: the connection ends, and the response says so,
+                // so keep-alive clients do not reuse it (the referee's dns-rebinding scenario).
+                if status == 403 { #expect(result.lowercased().contains("\r\nconnection: close\r\n")) }
                 if extra.hasPrefix("Mcp") {
                     let raw = Data(result.utf8)
                     let separator = try #require(raw.range(of:Data("\r\n\r\n".utf8)))
