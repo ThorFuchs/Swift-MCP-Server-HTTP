@@ -38,5 +38,10 @@ echo "fixture ready at $url"
 set +e
 "$referee" server --url "$url" --requirements 2026-07-28 --output-dir "$out/results" --timeout 90000 > "$out/referee.stdout" 2> "$out/referee.stderr"
 referee_exit=$?
+# 5. Fixture-dependent extension scenarios the referee does not run by default (Skills).
+for scenario in sep-2640-skills-enumeration sep-2640-skills-manifest sep-2640-skills-directory; do
+    "$referee" server --url "$url" --scenario "$scenario" --spec-version 2026-07-28 --force \
+        --output-dir "$out/extensions" --timeout 90000 >> "$out/extensions.stdout" 2>&1 || referee_exit=1
+done
 set -e
-python3 -I "$root/Scripts/conformance_summary.py" "$out/results" "$referee_exit"
+python3 -I "$root/Scripts/conformance_summary.py" "$out/results" "$referee_exit" "$out/extensions"

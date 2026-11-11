@@ -5,6 +5,7 @@ import Foundation
 import JSON
 import MCPProtocol
 import MCPServer
+import MCPSkills
 
 enum FixtureCatalog {
     static let image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
@@ -80,8 +81,8 @@ enum FixtureCatalog {
         var prompts = try promptProviders()
         prompts.append(try FixtureRounds.prompt())
         if dynamicPrompts { prompts.append(.init(definition: try FixtureJSON.parse(#"{"name":"test_dynamic_prompt","description":"Dynamic synthetic prompt"}"#)) { _, context in try await promptText("Dynamic prompt", context: context) }) }
-        return try .init(tools: tools, resources: resources(), templates: [template()], prompts: prompts,
-            completion: .init { _, _ in try .init(values: [], total: 0) }, extensions: [FixtureTasks.runtime.registration()], cache: CacheHints(ttlMilliseconds: 300000, scope: .public),
+        return try .init(tools: tools, resources: resources() + FixtureSkills.catalog.resources(), templates: [template()], prompts: prompts,
+            completion: .init { _, _ in try .init(values: [], total: 0) }, extensions: [FixtureTasks.runtime.registration(), FixtureSkills.catalog.registration()], cache: CacheHints(ttlMilliseconds: 300000, scope: .public),
             listChanged: [.listTools, .listPrompts])
     }
     struct ResourceText: Encodable, Sendable { let uri: String; let mimeType: String; let text: String }
