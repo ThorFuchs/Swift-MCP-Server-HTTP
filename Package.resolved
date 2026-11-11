@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "f8fad2f95ad67b45f6340c0960e2396094d67e07",
-        "version" : "5.1.1"
+        "revision" : "da9d28d69ebe3894b18376c8f2395c2f37b8448f",
+        "version" : "4.5.2"
       }
     },
     {
@@ -131,8 +131,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ThorFuchs/Swift-JSON.git",
       "state" : {
-        "revision" : "66718f11514d8c555f6a6b0ecc738e5029405a55",
-        "version" : "1.8.0"
+        "revision" : "e6405a72dd9092d04e24e310c9b03b9d9aa300c4"
       }
     },
     {
@@ -150,7 +149,7 @@
       "location" : "https://github.com/ThorFuchs/Swift-MCP-Server.git",
       "state" : {
         "branch" : "main",
-        "revision" : "cafc214ab7d5a75d1d3af9a462441aea70598e11"
+        "revision" : "b224fb2be7c7f71a5e35c2b7b03739a6dc924050"
       }
     },
     {
