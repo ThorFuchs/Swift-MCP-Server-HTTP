@@ -89,9 +89,12 @@ final class HTTPMailboxCancellation: Sendable {
 }
 
 extension HTTPStaticResponse {
-    func send(_ sender: consuming NIOHTTPServer.ResponseSender) async throws {
+    /// - Parameter closing: announce `Connection: close`, for responses after which the
+    ///   connection cannot carry another request (for example an unread request body).
+    func send(_ sender: consuming NIOHTTPServer.ResponseSender, closing: Bool = false) async throws {
         var response = HTTPResponse(status:.init(code:status))
         for field in fields { response.headerFields.append(.init(name:HTTPField.Name(field.name)!, value:field.value)) }
+        if closing { response.headerFields[.connection] = "close" }
         response.headerFields[.contentLength] = String(body.count)
         response.headerFields[.cacheControl] = "no-store"
         var bytes = UniqueArray<UInt8>(copying:body)
