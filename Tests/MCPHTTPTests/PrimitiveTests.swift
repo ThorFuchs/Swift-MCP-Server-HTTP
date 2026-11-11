@@ -118,3 +118,17 @@ func invalidMirrorEncodings(_ value: String) {
     #expect(throws: SSEFrame.Failure.invalidPayload) { _ = try SSEFrame.message(Array("{}\nid: 1".utf8)) }
     #expect(throws: SSEFrame.Failure.invalidPayload) { _ = try SSEFrame.message([13]) }
 }
+
+@Test func tasksMethodsMirrorTheTaskIdentifierIntoMcpName() throws {
+    for method in ["tasks/get", "tasks/update", "tasks/cancel"] {
+        #expect(HeaderFields.mirroredNameField(for: method) == "taskId")
+        let matching = try HeaderFields([.init("MCP-Protocol-Version", "2026-07-28"), .init("Mcp-Method", method), .init("Mcp-Name", "task-1")])
+        try matching.validateMirrors(version: "2026-07-28", method: method, name: "task-1")
+        #expect(throws: HeaderFailure.mismatch) { try matching.validateMirrors(version: "2026-07-28", method: method, name: "task-2") }
+        let missing = try HeaderFields([.init("MCP-Protocol-Version", "2026-07-28"), .init("Mcp-Method", method)])
+        #expect(throws: HeaderFailure.missing) { try missing.validateMirrors(version: "2026-07-28", method: method, name: "task-1") }
+    }
+    // Removed v1 methods and unknown methods carry no name mirror.
+    #expect(HeaderFields.mirroredNameField(for: "tasks/result") == nil)
+    #expect(HeaderFields.mirroredNameField(for: "tools/call") == "name")
+}

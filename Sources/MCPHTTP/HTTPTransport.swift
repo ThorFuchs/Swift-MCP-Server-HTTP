@@ -196,7 +196,7 @@ private struct MCPHTTPRequestHandler: HTTPServerRequestHandler {
                               let method = object["method"]?.stringValue,
                               let params = object["params"]?.objectValue,
                               let version = params["_meta"]?.objectValue?[ProtocolMetadata.protocolVersion]?.stringValue else { return }
-                        let name = WireMethod(rawValue:method)?.mirroredNameField.flatMap { params[$0]?.stringValue }
+                        let name = HeaderFields.mirroredNameField(for:method).flatMap { params[$0]?.stringValue }
                         do { try headers.validateMirrors(version:version,method:method,name:name) }
                         catch { throw RequestMirrorFailure.mismatch }
                     }
