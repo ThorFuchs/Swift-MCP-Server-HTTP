@@ -6,6 +6,7 @@ import JSON
 import MCPClient
 import MCPHTTPClient
 import MCPProtocol
+import MCPSkillsClient
 
 @main
 struct ConformanceClient {
@@ -69,6 +70,16 @@ struct ConformanceClient {
         case "http-invalid-tool-headers":
             // Invalid tools are excluded by listTools; every remaining tool is called.
             for tool in try await client.listTools().items { _ = try? await client.callTool(tool.name, arguments: try parse("{}")) }
+        case "sep-2640-client-no-prefetch":
+            // A host lists skills; nothing is fetched until a skill is loaded.
+            _ = try await SkillsClient(client: client).list()
+        case "sep-2640-client-verify-digest", "sep-2640-client-verify-size", "sep-2640-client-verify-frontmatter":
+            // Load the skill, then its other files only if SKILL.md verified.
+            let skills = SkillsClient(client: client)
+            for entry in try await skills.list().items {
+                guard let loaded = try? await skills.load(entry) else { continue }
+                for file in entry.files where file.uri != entry.uri { _ = try await skills.file(file.uri, of: loaded) }
+            }
         default:
             throw ClientError.invalidResponse("unsupported scenario \(scenario)")
         }

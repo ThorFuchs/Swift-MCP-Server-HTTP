@@ -30,6 +30,7 @@ let package = Package(
         ]),
         .executableTarget(name: "SwiftConformanceClient", dependencies: [
             .product(name: "MCPClient", package: "Swift-MCP-Server"),
+            .product(name: "MCPSkillsClient", package: "Swift-MCP-Server"),
             .product(name: "MCPHTTPClient", package: "Swift-MCP-Server-HTTP"),
             .product(name: "JSON", package: "swift-json"),
         ]),
