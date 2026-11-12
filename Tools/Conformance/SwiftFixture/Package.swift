@@ -13,6 +13,7 @@ let package = Package(
     targets: [
         .target(name: "ConformanceFixture", dependencies: [
             .product(name: "MCPTasks", package: "Swift-MCP-Server"),
+            .product(name: "MCPSkills", package: "Swift-MCP-Server"),
             .product(name: "MCPProtocol", package: "Swift-MCP-Server"),
             .product(name: "MCPServer", package: "Swift-MCP-Server"),
             .product(name: "MCPHTTP", package: "Swift-MCP-Server-HTTP"),
@@ -21,6 +22,7 @@ let package = Package(
         ]),
         .executableTarget(name: "SwiftConformanceServer", dependencies: ["ConformanceFixture",
             .product(name: "MCPTasks", package: "Swift-MCP-Server"),
+            .product(name: "MCPSkills", package: "Swift-MCP-Server"),
             .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             .product(name: "MCPServiceLifecycle", package: "Swift-MCP-Server"),
             .product(name: "MCPHTTP", package: "Swift-MCP-Server-HTTP"),
