@@ -28,6 +28,11 @@ let package = Package(
             .product(name: "MCPHTTP", package: "Swift-MCP-Server-HTTP"),
             .product(name: "Logging", package: "swift-log"),
         ]),
+        .executableTarget(name: "SwiftConformanceClient", dependencies: [
+            .product(name: "MCPClient", package: "Swift-MCP-Server"),
+            .product(name: "MCPHTTPClient", package: "Swift-MCP-Server-HTTP"),
+            .product(name: "JSON", package: "swift-json"),
+        ]),
         .testTarget(name: "FixtureTests", dependencies: ["ConformanceFixture",
             .product(name: "MCPProtocol", package: "Swift-MCP-Server"),
             .product(name: "MCPServer", package: "Swift-MCP-Server"),

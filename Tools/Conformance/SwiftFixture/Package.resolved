@@ -1,5 +1,5 @@
 {
-  "originHash" : "8bea3a68eb07398bf98306b106a1825d9ba6ec51c020c35fa5bbf366f4d0dd7e",
+  "originHash" : "1def33010fc702a2af9476f51128d3510f716ffc5930009da90ee5751c76e1a9",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -131,7 +131,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ThorFuchs/Swift-JSON.git",
       "state" : {
-        "revision" : "e6405a72dd9092d04e24e310c9b03b9d9aa300c4"
+        "revision" : "f2a0d12da7028edfbcb0cb307f19a921a3a12d03",
+        "version" : "1.9.0"
       }
     },
     {
@@ -149,7 +150,7 @@
       "location" : "https://github.com/ThorFuchs/Swift-MCP-Server.git",
       "state" : {
         "branch" : "main",
-        "revision" : "5bb0652de46b760ddcbf24305fefa545a2ec3a7f"
+        "revision" : "cb2ea3a184683ab522c6705b36f0bb6ce63786a1"
       }
     },
     {
@@ -231,6 +232,15 @@
       "state" : {
         "revision" : "a18ee16b8039866fd919bdb4e8e906882d4ecc75",
         "version" : "2.13.0"
+      }
+    },
+    {
+      "identity" : "swift-subprocess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-subprocess.git",
+      "state" : {
+        "revision" : "dbe21bd7dfd4ffef8c32588918542a8abfa1b54c",
+        "version" : "1.0.2"
       }
     },
     {

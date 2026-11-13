@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .library(name: "MCPHTTP", targets: ["MCPHTTP"]),
         .library(name: "MCPHTTPAuthorization", targets: ["MCPHTTPAuthorization"]),
+        .library(name: "MCPHTTPClient", targets: ["MCPHTTPClient"]),
     ],
     dependencies: [
         // Pre-1.0: follows the core's main branch; switches to `from: "1.0.0"` at the core release.
@@ -19,6 +20,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-http-api-proposal.git", exact: "0.2.0", traits: []),
         // BasicContainers' borrowing iterators changed incompatibly in swift-collections 1.7.
         .package(url: "https://github.com/apple/swift-collections.git", exact: "1.6.0"),
+        .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.35.0"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.12.1"),
     ],
     targets: [
@@ -27,6 +29,9 @@ let package = Package(
             .product(name: "JSON", package: "swift-json"), .product(name: "NIOHTTPServer", package: "swift-http-server"),
             .product(name: "NIOCore", package: "swift-nio"), .product(name: "HTTPAPIs", package: "swift-http-api-proposal"),
             .product(name: "BasicContainers", package: "swift-collections")]),
+        .target(name: "MCPHTTPClient", dependencies: [
+            .product(name: "MCPClient", package: "Swift-MCP-Server"), .product(name: "AsyncHTTPClient", package: "async-http-client"),
+            .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOHTTP1", package: "swift-nio")]),
         .target(name: "MCPHTTPAuthorization", dependencies: ["MCPHTTP",
             .product(name: "MCPServer", package: "Swift-MCP-Server"), .product(name: "MCPProtocol", package: "Swift-MCP-Server"),
             .product(name: "JSON", package: "swift-json")]),
@@ -35,6 +40,10 @@ let package = Package(
             .product(name: "MCPServerTesting", package: "Swift-MCP-Server"), .product(name: "MCPServer", package: "Swift-MCP-Server"),
             .product(name: "MCPProtocol", package: "Swift-MCP-Server"), .product(name: "JSON", package: "swift-json")],
             exclude: ["TEST_PLAN.md"], resources: [.copy("Resources")]),
+        .testTarget(name: "MCPHTTPClientTests", dependencies: ["MCPHTTPClient", "MCPHTTP",
+            .product(name: "MCPClient", package: "Swift-MCP-Server"), .product(name: "MCPServer", package: "Swift-MCP-Server"),
+            .product(name: "MCPProtocol", package: "Swift-MCP-Server"), .product(name: "JSON", package: "swift-json"),
+            .product(name: "AsyncHTTPClient", package: "async-http-client")]),
         .testTarget(name: "MCPHTTPAuthorizationTests", dependencies: ["MCPHTTPAuthorization", "MCPHTTP",
             .product(name: "MCPProtocol", package: "Swift-MCP-Server"), .product(name: "MCPServer", package: "Swift-MCP-Server"),
             .product(name: "MCPServerTesting", package: "Swift-MCP-Server")],
