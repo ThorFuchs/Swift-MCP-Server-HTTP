@@ -9,7 +9,8 @@ public protocol HTTPClientAuthorizing: Sendable {
 
     /// Called when a request is answered with `401` or `403`. Returns true when new
     /// credentials are available and the transport should send the request once more; throws
-    /// when authorization failed. The transport retries a request at most once.
+    /// when authorization failed. The transport retries a request at most once after a `401`
+    /// and once after a `403`, so a step-up can follow a first authorization.
     func handleChallenge(_ challenge: HTTPAuthorizationChallenge) async throws -> Bool
 }
 

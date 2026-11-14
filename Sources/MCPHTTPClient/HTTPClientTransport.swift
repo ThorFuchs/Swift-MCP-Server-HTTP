@@ -30,7 +30,7 @@ public struct HTTPClientTransport: ClientTransport {
     ///   - client: the AsyncHTTPClient to use; the caller owns its lifetime (`.shared` by default).
     ///   - timeout: deadline of one exchange, including listen streams.
     ///   - authorization: supplies credentials and handles `401`/`403` challenges; a request
-    ///     is retried at most once after the handler obtained new credentials.
+    ///     is retried at most once per status after the handler obtained new credentials.
     ///   - headers: extra headers per request.
     public init(endpoint: URL, client: HTTPClient = .shared, maximumMessageBytes: Int = 16 * 1024 * 1024,
                 timeout: TimeAmount = .hours(1), authorization: (any HTTPClientAuthorizing)? = nil,
@@ -42,7 +42,8 @@ public struct HTTPClientTransport: ClientTransport {
     public var mirrorsToolParameters: Bool { true }
 
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
-        var retried = false
+        // One retry per authorization step: after a 401 and after a 403 (step-up).
+        var retried: Set<Int> = []
         while true {
             var http = HTTPClientRequest(url: endpoint.absoluteString)
             http.method = .POST
@@ -69,7 +70,7 @@ public struct HTTPClientTransport: ClientTransport {
                 _ = try? await response.body.collect(upTo: 64 * 1024)
                 let challenge = HTTPAuthorizationChallenge(endpoint: endpoint, status: status,
                     wwwAuthenticate: response.headers["WWW-Authenticate"], sentAuthorization: sentAuthorization)
-                if !retried, try await authorization.handleChallenge(challenge) { retried = true; continue }
+                if !retried.contains(status), try await authorization.handleChallenge(challenge) { retried.insert(status); continue }
                 throw HTTPClientTransportError.status(status)
             }
             try await deliver(response, receive: receive)

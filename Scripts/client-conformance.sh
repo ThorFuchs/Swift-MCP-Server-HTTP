@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the official MCP conformance referee in client mode (requirements 2026-07-28) against the
 # Swift client fixture. Every listed scenario must pass; authorization scenarios are added per
-# slice of ADR-0006 as they land (A1-A3 and basic scope selection so far).
+# slice of ADR-0006 as they land (A1-A4 so far).
 # Usage: Scripts/client-conformance.sh [output-dir]
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +21,8 @@ scenarios=(tools_call request-metadata sep-2322-client-request-state http-standa
     auth/resource-mismatch auth/basic-cimd auth/pre-registration
     auth/token-endpoint-auth-basic auth/token-endpoint-auth-post auth/token-endpoint-auth-none
     auth/iss-supported auth/iss-not-advertised auth/iss-supported-missing auth/iss-wrong-issuer auth/iss-unexpected auth/iss-normalized
-    auth/scope-from-www-authenticate auth/scope-from-scopes-supported auth/scope-omitted-when-undefined)
+    auth/scope-from-www-authenticate auth/scope-from-scopes-supported auth/scope-omitted-when-undefined
+    auth/scope-step-up auth/scope-retry-limit auth/offline-access-scope auth/offline-access-not-supported)
 failed=0
 for scenario in "${scenarios[@]}"; do
     # Extension scenarios (sep-*) are off the spec timeline; the referee runs them only with --force.
