@@ -24,32 +24,60 @@ public struct HTTPClientTransport: ClientTransport {
     public let timeout: TimeAmount
     private let client: HTTPClient
     private let headers: @Sendable () async throws -> [(name: String, value: String)]
+    private let authorization: (any HTTPClientAuthorizing)?
 
     /// - Parameters:
     ///   - client: the AsyncHTTPClient to use; the caller owns its lifetime (`.shared` by default).
-    ///   - headers: extra headers per request, for example `Authorization` from a token store.
     ///   - timeout: deadline of one exchange, including listen streams.
+    ///   - authorization: supplies credentials and handles `401`/`403` challenges; a request
+    ///     is retried at most once after the handler obtained new credentials.
+    ///   - headers: extra headers per request.
     public init(endpoint: URL, client: HTTPClient = .shared, maximumMessageBytes: Int = 16 * 1024 * 1024,
-                timeout: TimeAmount = .hours(1), headers: @escaping @Sendable () async throws -> [(name: String, value: String)] = { [] }) {
+                timeout: TimeAmount = .hours(1), authorization: (any HTTPClientAuthorizing)? = nil,
+                headers: @escaping @Sendable () async throws -> [(name: String, value: String)] = { [] }) {
         self.endpoint = endpoint; self.client = client; self.maximumMessageBytes = maximumMessageBytes
-        self.timeout = timeout; self.headers = headers
+        self.timeout = timeout; self.authorization = authorization; self.headers = headers
     }
 
     public var mirrorsToolParameters: Bool { true }
 
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
-        var http = HTTPClientRequest(url: endpoint.absoluteString)
-        http.method = .POST
-        http.headers.add(name: "Content-Type", value: "application/json")
-        http.headers.add(name: "Accept", value: "application/json, text/event-stream")
-        http.headers.add(name: "MCP-Protocol-Version", value: Client.protocolVersion)
-        http.headers.add(name: "Mcp-Method", value: request.method)
-        if let name = request.name { http.headers.add(name: "Mcp-Name", value: HeaderValue.encode(name)) }
-        for header in request.parameterHeaders { http.headers.add(name: header.name, value: header.value) }
-        for header in try await headers() { http.headers.add(name: header.name, value: header.value) }
-        http.body = .bytes(ByteBuffer(bytes: request.body))
+        var retried = false
+        while true {
+            var http = HTTPClientRequest(url: endpoint.absoluteString)
+            http.method = .POST
+            http.headers.add(name: "Content-Type", value: "application/json")
+            http.headers.add(name: "Accept", value: "application/json, text/event-stream")
+            http.headers.add(name: "MCP-Protocol-Version", value: Client.protocolVersion)
+            http.headers.add(name: "Mcp-Method", value: request.method)
+            if let name = request.name { http.headers.add(name: "Mcp-Name", value: HeaderValue.encode(name)) }
+            for header in request.parameterHeaders { http.headers.add(name: header.name, value: header.value) }
+            for header in try await headers() { http.headers.add(name: header.name, value: header.value) }
+            var sentAuthorization: String?
+            if let authorization {
+                for header in try await authorization.authorizationHeaders(for: endpoint) {
+                    http.headers.replaceOrAdd(name: header.name, value: header.value)
+                    if header.name.lowercased() == "authorization" { sentAuthorization = header.value }
+                }
+            }
+            http.body = .bytes(ByteBuffer(bytes: request.body))
 
-        let response = try await client.execute(http, timeout: timeout)
+            let response = try await client.execute(http, timeout: timeout)
+            let status = Int(response.status.code)
+            if let authorization, status == 401 || status == 403 {
+                // The body is buffered, so the request can be sent again unchanged.
+                _ = try? await response.body.collect(upTo: 64 * 1024)
+                let challenge = HTTPAuthorizationChallenge(endpoint: endpoint, status: status,
+                    wwwAuthenticate: response.headers["WWW-Authenticate"], sentAuthorization: sentAuthorization)
+                if !retried, try await authorization.handleChallenge(challenge) { retried = true; continue }
+                throw HTTPClientTransportError.status(status)
+            }
+            try await deliver(response, receive: receive)
+            return
+        }
+    }
+
+    private func deliver(_ response: HTTPClientResponse, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
         let type = response.headers.first(name: "Content-Type")?.lowercased() ?? ""
         if type.hasPrefix("text/event-stream") {
             var parser = ServerSentEvents(maximumBytes: maximumMessageBytes)

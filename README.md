@@ -1,7 +1,9 @@
 # Swift-MCP-Server-HTTP
 
 Streamable HTTP transport (`MCPHTTP`) and bearer authorization (`MCPHTTPAuthorization`) for
-[Swift-MCP-Server](https://github.com/ThorFuchs/Swift-MCP-Server) (MCP 2026-07-28, macOS 27+, Swift 6.4).
+[Swift-MCP-Server](https://github.com/ThorFuchs/Swift-MCP-Server) (MCP 2026-07-28, macOS 27+, Swift 6.4),
+plus the client side: `MCPHTTPClient` (Streamable HTTP for `MCPClient`) and
+`MCPClientAuthorization` (OAuth 2.1 for clients, see [Docs/CLIENT_AUTHORIZATION.md](Docs/CLIENT_AUTHORIZATION.md)).
 
 > **Status: pre-release (0.x).** Depends on the core's `main` branch until core 1.0.0.
 
@@ -11,6 +13,10 @@ Streamable HTTP transport (`MCPHTTP`) and bearer authorization (`MCPHTTPAuthoriz
 against `Tools/Conformance/SwiftFixture`. Latest local run (2026-11-10, upstream SwiftNIO 2.105.0):
 **37/37 required scenarios passed**; the 3 pending core diagnostics passed; the 10 optional
 Tasks diagnostics fail because Tasks is not supported (not scored).
+
+`Scripts/client-conformance.sh` runs the client leg against the client fixture: 32 scenarios,
+including 20 `auth/*` scenarios (discovery, client identity, code flow, `iss` and basic scope
+selection). Latest local run (2026-11-14): **32/32 passed**.
 
 ## Known issues
 
