@@ -18,6 +18,14 @@ jobs:
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, macOS, macos-27]
     timeout-minutes: 90
+    # Swift-MCP-Server is private: git and SwiftPM fetch it with a read-only token (Contents:
+    # read on that repository only). Job-scoped through environment variables, so nothing is
+    # written to the runner's git configuration; Actions masks the value in logs. Fork PRs
+    # never reach this job (see `if` above).
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.SWIFT_MCP_SERVER_READ_TOKEN }}@github.com/ThorFuchs/Swift-MCP-Server.git.insteadOf
+      GIT_CONFIG_VALUE_0: https://github.com/ThorFuchs/Swift-MCP-Server.git
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
