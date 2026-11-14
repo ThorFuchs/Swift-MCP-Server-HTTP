@@ -1,5 +1,5 @@
 {
-  "originHash" : "1def33010fc702a2af9476f51128d3510f716ffc5930009da90ee5751c76e1a9",
+  "originHash" : "bc7f94b89aa05ea44beec4bddb405f3bd1687f5c2cb9c78f1e6c99a95d8942e9",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -150,7 +150,7 @@
       "location" : "https://github.com/ThorFuchs/Swift-MCP-Server.git",
       "state" : {
         "branch" : "main",
-        "revision" : "cb2ea3a184683ab522c6705b36f0bb6ce63786a1"
+        "revision" : "d892bd34add1ad067ae6f286bd74c824486d8c07"
       }
     },
     {
@@ -232,6 +232,15 @@
       "state" : {
         "revision" : "a18ee16b8039866fd919bdb4e8e906882d4ecc75",
         "version" : "2.13.0"
+      }
+    },
+    {
+      "identity" : "swift-sqlite",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ThorFuchs/Swift-SQLite.git",
+      "state" : {
+        "revision" : "448cc8d9507f1ff6adce3eeac44568cc364ed5c3",
+        "version" : "0.2.0"
       }
     },
     {
