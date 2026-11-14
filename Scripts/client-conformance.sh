@@ -1,6 +1,7 @@
 #!/bin/bash
-# Runs the official MCP conformance referee in client mode (requirements 2026-07-28, scenarios
-# without authorization) against the Swift client fixture. Every scenario must pass.
+# Runs the official MCP conformance referee in client mode (requirements 2026-07-28) against the
+# Swift client fixture. Every listed scenario must pass; authorization scenarios are added per
+# slice of ADR-0006 as they land (A1-A3 and basic scope selection so far).
 # Usage: Scripts/client-conformance.sh [output-dir]
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,17 +16,22 @@ client="$(swift build --package-path Tools/Conformance/SwiftFixture --show-bin-p
 
 scenarios=(tools_call request-metadata sep-2322-client-request-state http-standard-headers
     http-custom-headers http-invalid-tool-headers json-schema-ref-no-deref json-schema-2020-12-preservation
-    sep-2640-client-no-prefetch sep-2640-client-verify-digest sep-2640-client-verify-size sep-2640-client-verify-frontmatter)
+    sep-2640-client-no-prefetch sep-2640-client-verify-digest sep-2640-client-verify-size sep-2640-client-verify-frontmatter
+    auth/metadata-default auth/metadata-var1 auth/metadata-var2 auth/metadata-var3 auth/metadata-issuer-mismatch
+    auth/resource-mismatch auth/basic-cimd auth/pre-registration
+    auth/token-endpoint-auth-basic auth/token-endpoint-auth-post auth/token-endpoint-auth-none
+    auth/iss-supported auth/iss-not-advertised auth/iss-supported-missing auth/iss-wrong-issuer auth/iss-unexpected auth/iss-normalized
+    auth/scope-from-www-authenticate auth/scope-from-scopes-supported auth/scope-omitted-when-undefined)
 failed=0
 for scenario in "${scenarios[@]}"; do
     # Extension scenarios (sep-*) are off the spec timeline; the referee runs them only with --force.
     force=(); [[ "$scenario" == sep-2640-* ]] && force=(--force)
     set +e
     "$referee" client --command "$client" --scenario "$scenario" --spec-version 2026-07-28 ${force[@]+"${force[@]}"} \
-        --output-dir "$out/$scenario" > "$out/$scenario.log" 2>&1
+        --output-dir "$out/${scenario//\//-}" > "$out/${scenario//\//-}.log" 2>&1
     exit_code=$?
     set -e
-    summary="$(grep -E '^Passed:' "$out/$scenario.log" | tail -1 || true)"
+    summary="$(grep -E '^Passed:' "$out/${scenario//\//-}.log" | tail -1 || true)"
     if [[ $exit_code -ne 0 ]] || ! grep -qE '^Passed: [0-9]+/[0-9]+, 0 failed' <<< "$summary"; then
         echo "FAIL $scenario (exit $exit_code) ${summary:-no summary}"; failed=1
     else

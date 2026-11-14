@@ -2,8 +2,10 @@
 // Client conformance fixture: the official referee starts `SwiftConformanceClient <server-url>`
 // with the scenario in MCP_CONFORMANCE_SCENARIO and optional MCP_CONFORMANCE_CONTEXT (JSON).
 import Foundation
+import AsyncHTTPClient
 import JSON
 import MCPClient
+import MCPClientAuthorization
 import MCPHTTPClient
 import MCPProtocol
 import MCPSkillsClient
@@ -19,6 +21,10 @@ struct ConformanceClient {
         }
         do {
             let context = try environment["MCP_CONFORMANCE_CONTEXT"].map { try parse($0) }
+            if scenario.hasPrefix("auth/") {
+                try await authorize(endpoint: endpoint, context: context)
+                exit(0)
+            }
             let client = Client(transport: HTTPClientTransport(endpoint: endpoint, timeout: .seconds(60)), configuration: .init(
                 info: try parse(#"{"name":"swift-conformance-client","version":"0.1.0"}"#),
                 elicitation: .init { _ in try parse(#"{"action":"accept","content":{"confirmed":true}}"#) },
@@ -30,6 +36,33 @@ struct ConformanceClient {
             FileHandle.standardError.write(Data("\(scenario): \(error)\n".utf8))
             exit(1)
         }
+    }
+
+    /// Authorization scenarios: list tools and call the first one; the transport runs the
+    /// OAuth flow on the first 401.
+    static func authorize(endpoint: URL, context: JSON?) async throws {
+        let values = context?.objectValue
+        var preRegistered: [PreRegisteredClient] = []
+        if let id = values?["client_id"]?.stringValue, let issuer = values?["issuer"]?.stringValue {
+            preRegistered.append(PreRegisteredClient(issuer: issuer, clientID: id, clientSecret: values?["client_secret"]?.stringValue))
+        }
+        let configuration = OAuthClientConfiguration(
+            identity: ClientIdentity(preRegistered: preRegistered,
+                metadataDocument: URL(string: "https://conformance-test.local/client-metadata.json"),
+                dynamicRegistration: DynamicRegistration(clientName: "swift-conformance-client")),
+            redirectURI: URL(string: "http://127.0.0.1:8976/callback")!, allowsInsecureLoopback: true)
+        let browser = HTTPClient(eventLoopGroupProvider: .singleton, configuration: .init(redirectConfiguration: .disallow))
+        do {
+            let oauth = OAuthClient(endpoint: endpoint, configuration: configuration, userAgent: RedirectCapture(client: browser))
+            let client = Client(transport: HTTPClientTransport(endpoint: endpoint, timeout: .seconds(60), authorization: oauth),
+                configuration: .init(info: try parse(#"{"name":"swift-conformance-client","version":"0.1.0"}"#)))
+            let tools = try await client.listTools()
+            if let tool = tools.items.first { _ = try await client.callTool(tool.name, arguments: try parse("{}")) }
+        } catch {
+            try? await browser.shutdown()
+            throw error
+        }
+        try await browser.shutdown()
     }
 
     static func parse(_ text: String) throws -> JSON { try WireCodec.parse(Array(text.utf8), limits: .balanced).result }
@@ -83,5 +116,18 @@ struct ConformanceClient {
         default:
             throw ClientError.invalidResponse("unsupported scenario \(scenario)")
         }
+    }
+}
+
+/// The referee's authorization endpoint answers at once with a redirect carrying the code;
+/// a real host would open a browser here.
+struct RedirectCapture: AuthorizationUserAgent {
+    let client: HTTPClient
+    func authorize(_ request: AuthorizationRequest) async throws -> URL {
+        let response = try await client.execute(HTTPClientRequest(url: request.url.absoluteString), timeout: .seconds(30))
+        _ = try? await response.body.collect(upTo: 64 * 1024)
+        guard (300..<400).contains(Int(response.status.code)), let location = response.headers.first(name: "Location"),
+              let url = URL(string: location) else { throw ClientError.invalidResponse("authorization endpoint did not redirect") }
+        return url
     }
 }

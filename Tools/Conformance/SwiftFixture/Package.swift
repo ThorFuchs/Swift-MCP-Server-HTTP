@@ -32,6 +32,7 @@ let package = Package(
             .product(name: "MCPClient", package: "Swift-MCP-Server"),
             .product(name: "MCPSkillsClient", package: "Swift-MCP-Server"),
             .product(name: "MCPHTTPClient", package: "Swift-MCP-Server-HTTP"),
+            .product(name: "MCPClientAuthorization", package: "Swift-MCP-Server-HTTP"),
             .product(name: "JSON", package: "swift-json"),
         ]),
         .testTarget(name: "FixtureTests", dependencies: ["ConformanceFixture",

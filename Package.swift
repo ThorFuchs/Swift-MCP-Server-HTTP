@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "MCPHTTP", targets: ["MCPHTTP"]),
         .library(name: "MCPHTTPAuthorization", targets: ["MCPHTTPAuthorization"]),
         .library(name: "MCPHTTPClient", targets: ["MCPHTTPClient"]),
+        .library(name: "MCPClientAuthorization", targets: ["MCPClientAuthorization"]),
     ],
     dependencies: [
         // Pre-1.0: follows the core's main branch; switches to `from: "1.0.0"` at the core release.
@@ -22,6 +23,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-collections.git", exact: "1.6.0"),
         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.35.0"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.12.1"),
+        // CryptoKit on Apple platforms; the API-compatible swift-crypto elsewhere (same range as the core).
+        .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
     ],
     targets: [
         .target(name: "MCPHTTP", dependencies: [
@@ -32,6 +35,10 @@ let package = Package(
         .target(name: "MCPHTTPClient", dependencies: [
             .product(name: "MCPClient", package: "Swift-MCP-Server"), .product(name: "AsyncHTTPClient", package: "async-http-client"),
             .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOHTTP1", package: "swift-nio")]),
+        .target(name: "MCPClientAuthorization", dependencies: ["MCPHTTPClient",
+            .product(name: "MCPProtocol", package: "Swift-MCP-Server"), .product(name: "JSON", package: "swift-json"),
+            .product(name: "AsyncHTTPClient", package: "async-http-client"), .product(name: "NIOCore", package: "swift-nio"),
+            .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))]),
         .target(name: "MCPHTTPAuthorization", dependencies: ["MCPHTTP",
             .product(name: "MCPServer", package: "Swift-MCP-Server"), .product(name: "MCPProtocol", package: "Swift-MCP-Server"),
             .product(name: "JSON", package: "swift-json")]),
@@ -43,7 +50,13 @@ let package = Package(
         .testTarget(name: "MCPHTTPClientTests", dependencies: ["MCPHTTPClient", "MCPHTTP",
             .product(name: "MCPClient", package: "Swift-MCP-Server"), .product(name: "MCPServer", package: "Swift-MCP-Server"),
             .product(name: "MCPProtocol", package: "Swift-MCP-Server"), .product(name: "JSON", package: "swift-json"),
-            .product(name: "AsyncHTTPClient", package: "async-http-client")]),
+            .product(name: "AsyncHTTPClient", package: "async-http-client"), .product(name: "NIOCore", package: "swift-nio"),
+            .product(name: "NIOPosix", package: "swift-nio"), .product(name: "NIOHTTP1", package: "swift-nio")]),
+        .testTarget(name: "MCPClientAuthorizationTests", dependencies: ["MCPClientAuthorization", "MCPHTTPClient", "MCPHTTP",
+            .product(name: "MCPClient", package: "Swift-MCP-Server"), .product(name: "MCPServer", package: "Swift-MCP-Server"),
+            .product(name: "MCPProtocol", package: "Swift-MCP-Server"), .product(name: "JSON", package: "swift-json"),
+            .product(name: "AsyncHTTPClient", package: "async-http-client"),
+            .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))]),
         .testTarget(name: "MCPHTTPAuthorizationTests", dependencies: ["MCPHTTPAuthorization", "MCPHTTP",
             .product(name: "MCPProtocol", package: "Swift-MCP-Server"), .product(name: "MCPServer", package: "Swift-MCP-Server"),
             .product(name: "MCPServerTesting", package: "Swift-MCP-Server")],
