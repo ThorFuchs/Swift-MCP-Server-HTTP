@@ -14,11 +14,14 @@ swift build --package-path Tools/Conformance/SwiftFixture --product SwiftConform
 client="$(swift build --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceClient"
 
 scenarios=(tools_call request-metadata sep-2322-client-request-state http-standard-headers
-    http-custom-headers http-invalid-tool-headers json-schema-ref-no-deref json-schema-2020-12-preservation)
+    http-custom-headers http-invalid-tool-headers json-schema-ref-no-deref json-schema-2020-12-preservation
+    sep-2640-client-no-prefetch sep-2640-client-verify-digest sep-2640-client-verify-size sep-2640-client-verify-frontmatter)
 failed=0
 for scenario in "${scenarios[@]}"; do
+    # Extension scenarios (sep-*) are off the spec timeline; the referee runs them only with --force.
+    force=(); [[ "$scenario" == sep-2640-* ]] && force=(--force)
     set +e
-    "$referee" client --command "$client" --scenario "$scenario" --spec-version 2026-07-28 \
+    "$referee" client --command "$client" --scenario "$scenario" --spec-version 2026-07-28 ${force[@]+"${force[@]}"} \
         --output-dir "$out/$scenario" > "$out/$scenario.log" 2>&1
     exit_code=$?
     set -e
