@@ -77,11 +77,19 @@ public struct OAuthClientConfiguration: Sendable {
     public var maximumDocumentBytes: Int
     /// Deadline of each request to an authorization or resource server.
     public var timeout: TimeAmount
+    /// Adds `offline_access` to the requested scopes when the authorization server lists it,
+    /// to obtain a refresh token (SEP-2207).
+    public var requestsOfflineAccess: Bool
+    /// How many `403 insufficient_scope` step-ups may follow one another before the client
+    /// stops asking the user; a fresh `401` authorization resets the count.
+    public var maximumStepUps: Int
 
     public init(identity: ClientIdentity, redirectURI: URL, allowsInsecureLoopback: Bool = false,
-                maximumDocumentBytes: Int = 64 * 1024, timeout: TimeAmount = .seconds(30)) {
+                maximumDocumentBytes: Int = 64 * 1024, timeout: TimeAmount = .seconds(30),
+                requestsOfflineAccess: Bool = true, maximumStepUps: Int = 3) {
         self.identity = identity; self.redirectURI = redirectURI; self.allowsInsecureLoopback = allowsInsecureLoopback
         self.maximumDocumentBytes = maximumDocumentBytes; self.timeout = timeout
+        self.requestsOfflineAccess = requestsOfflineAccess; self.maximumStepUps = maximumStepUps
     }
 }
 

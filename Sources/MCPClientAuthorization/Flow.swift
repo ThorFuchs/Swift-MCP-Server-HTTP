@@ -132,11 +132,25 @@ struct AuthorizationFlow: Sendable {
     }
 
     func exchange(code: String, verifier: String, server: AuthorizationServerMetadata, client: ResolvedClient, resource: String) async throws -> AccessToken {
-        var parameters: [(String, String)] = [
+        try await tokenRequest([
             ("grant_type", "authorization_code"), ("code", code),
             ("redirect_uri", configuration.redirectURI.absoluteString),
             ("code_verifier", verifier), ("resource", resource),
-        ]
+        ], server: server, client: client, previousRefreshToken: nil)
+    }
+
+    // MARK: A4: refresh
+
+    /// Exchanges a refresh token for a new access token with the same resource. Keeps the
+    /// refresh token when the server does not rotate it.
+    func refresh(_ refreshToken: String, server: AuthorizationServerMetadata, client: ResolvedClient, resource: String) async throws -> AccessToken {
+        try await tokenRequest([("grant_type", "refresh_token"), ("refresh_token", refreshToken), ("resource", resource)],
+                               server: server, client: client, previousRefreshToken: refreshToken)
+    }
+
+    private func tokenRequest(_ grant: [(String, String)], server: AuthorizationServerMetadata, client: ResolvedClient,
+                              previousRefreshToken: String?) async throws -> AccessToken {
+        var parameters = grant
         var headers: [(name: String, value: String)] = [("Content-Type", "application/x-www-form-urlencoded"), ("Accept", "application/json")]
         switch client.authentication {
         case .none:
@@ -160,7 +174,7 @@ struct AuthorizationFlow: Sendable {
             throw OAuthClientError.invalidDocument("token response")
         }
         guard type.lowercased() == "bearer" else { throw OAuthClientError.unsupportedTokenType(type) }
-        return AccessToken(value: value, scope: document.string("scope"), refreshToken: document.string("refresh_token"),
+        return AccessToken(value: value, scope: document.string("scope"), refreshToken: document.string("refresh_token") ?? previousRefreshToken,
             expiresIn: try? document["expires_in"]?.numberValue?.integer(as: Int.self))
     }
 }

@@ -32,6 +32,10 @@ struct Behavior: Sendable {
     var registrationSecret: String? = nil
     var tokenType = "Bearer"
     var authorizationDelay: Duration = .zero
+    var serverScopes: [String]? = nil
+    var refreshToken: String? = nil
+    var refreshFails = false
+    var expiresIn = 3600
 }
 
 /// A request log shared by the fake servers and the user agent.
@@ -82,14 +86,19 @@ private struct FakeServers: AuthorizationHTTP {
                  "response_types_supported":["code"],"code_challenge_methods_supported":["S256"],
                  "token_endpoint_auth_methods_supported":\(list(behavior.authMethods)),
                  "authorization_response_iss_parameter_supported":\(behavior.issSupported),
-                 "client_id_metadata_document_supported":\(behavior.cimdSupported)}
+                 "client_id_metadata_document_supported":\(behavior.cimdSupported)\(behavior.serverScopes.map { ",\"scopes_supported\":" + list($0) } ?? "")}
                 """)
         case ("POST", "\(issuer)/register"):
             let secret = behavior.registrationSecret.map { #","client_secret":"\#($0)""# } ?? ""
             let method = behavior.registrationMethod.map { #","token_endpoint_auth_method":"\#($0)""# } ?? ""
             return json(201, #"{"client_id":"registered-client"\#(secret)\#(method)}"#)
         case ("POST", "\(issuer)/token"):
-            return json(200, #"{"access_token":"token-1","token_type":"\#(behavior.tokenType)","expires_in":3600}"#)
+            let grant = form(text)["grant_type"]
+            if grant == "refresh_token", behavior.refreshFails { return json(400, #"{"error":"invalid_grant"}"#) }
+            // Access tokens are numbered by token request; only the code grant issues a refresh token.
+            let refresh = grant == "authorization_code" ? behavior.refreshToken.map { #","refresh_token":"\#($0)""# } ?? "" : ""
+            let number = log.requests(to: "/token").count
+            return json(200, #"{"access_token":"token-\#(number)","token_type":"\#(behavior.tokenType)","expires_in":\#(behavior.expiresIn)\#(refresh)}"#)
         default:
             return json(404, #"{"error":"not_found"}"#)
         }
@@ -119,9 +128,11 @@ private struct ApprovingUserAgent: AuthorizationUserAgent {
     }
 }
 
-private func oauth(_ behavior: Behavior = Behavior(), identity: ClientIdentity? = nil, log: Log) -> OAuthClient {
-    let configuration = OAuthClientConfiguration(
+private func oauth(_ behavior: Behavior = Behavior(), identity: ClientIdentity? = nil, log: Log,
+                   configure: (inout OAuthClientConfiguration) -> Void = { _ in }) -> OAuthClient {
+    var configuration = OAuthClientConfiguration(
         identity: identity ?? ClientIdentity(dynamicRegistration: DynamicRegistration(clientName: "tests")), redirectURI: redirect)
+    configure(&configuration)
     return OAuthClient(endpoint: endpoint, configuration: configuration,
         userAgent: ApprovingUserAgent(behavior: behavior, log: log), http: FakeServers(behavior: behavior, log: log))
 }
@@ -292,6 +303,87 @@ private func challenge(_ header: String = #"Bearer error="invalid_token", scope=
         let none = Log()
         _ = try await oauth(log: none).handleChallenge(challenge(#"Bearer error="invalid_token""#))
         #expect(query(try #require(none.authorizationRequests.first))["scope"] == nil)
+    }
+}
+
+private func insufficient(_ scope: String, sent: String) -> HTTPAuthorizationChallenge {
+    HTTPAuthorizationChallenge(endpoint: endpoint, status: 403,
+        wwwAuthenticate: [#"Bearer error="insufficient_scope", scope="\#(scope)", resource_metadata="https://mcp.example/.well-known/oauth-protected-resource/mcp""#],
+        sentAuthorization: sent)
+}
+
+@Suite struct OAuthClientScopesAndRefresh {
+    @Test func stepUpAsksForTheUnionOfScopesAndOfflineAccess() async throws {
+        let log = Log()
+        let client = oauth(Behavior(serverScopes: ["mcp:read", "mcp:write", "offline_access"]), log: log)
+        #expect(try await client.handleChallenge(challenge(#"Bearer error="invalid_token", scope="mcp:read""#)))
+        #expect(try await client.handleChallenge(insufficient("mcp:write", sent: "Bearer token-1")))
+        #expect(log.authorizationRequests.map { query($0)["scope"] } == ["mcp:read offline_access", "mcp:read offline_access mcp:write"])
+        #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-2"])
+        // Scopes the token was already requested with cannot be fixed by asking again.
+        #expect(try await !client.handleChallenge(insufficient("mcp:read", sent: "Bearer token-2")))
+        #expect(log.authorizationRequests.count == 2)
+    }
+
+    @Test func offlineAccessOnlyWhenOfferedAndWanted() async throws {
+        let unlisted = Log()
+        _ = try await oauth(Behavior(serverScopes: ["mcp:read"]), log: unlisted).handleChallenge(challenge(#"Bearer scope="mcp:read""#))
+        #expect(query(try #require(unlisted.authorizationRequests.first))["scope"] == "mcp:read")
+        let declined = Log()
+        _ = try await oauth(Behavior(serverScopes: ["mcp:read", "offline_access"]), log: declined) { $0.requestsOfflineAccess = false }
+            .handleChallenge(challenge(#"Bearer scope="mcp:read""#))
+        #expect(query(try #require(declined.authorizationRequests.first))["scope"] == "mcp:read")
+    }
+
+    @Test func stepUpsStopAtTheLimitAndNeedInsufficientScope() async throws {
+        let log = Log()
+        let client = oauth(log: log) { $0.maximumStepUps = 2 }
+        #expect(try await client.handleChallenge(challenge(#"Bearer scope="a""#)))
+        #expect(try await client.handleChallenge(insufficient("b", sent: "Bearer token-1")))
+        #expect(try await client.handleChallenge(insufficient("c", sent: "Bearer token-2")))
+        #expect(try await !client.handleChallenge(insufficient("d", sent: "Bearer token-3")))
+        #expect(try await !client.handleChallenge(HTTPAuthorizationChallenge(endpoint: endpoint, status: 403,
+            wwwAuthenticate: [#"Bearer error="invalid_token""#], sentAuthorization: "Bearer token-3")))
+        #expect(log.authorizationRequests.count == 3)
+        // A fresh 401 authorization resets the count.
+        #expect(try await client.handleChallenge(challenge(#"Bearer scope="a""#, sent: "Bearer token-3")))
+        #expect(try await client.handleChallenge(insufficient("e", sent: "Bearer token-4")))
+    }
+
+    @Test func aRejectedTokenIsRefreshedWithoutTheUser() async throws {
+        let log = Log()
+        let client = oauth(Behavior(refreshToken: "r1"), log: log)
+        #expect(try await client.handleChallenge(challenge()))
+        #expect(try await client.handleChallenge(challenge(sent: "Bearer token-1")))
+        #expect(try await client.handleChallenge(challenge(sent: "Bearer token-2")))
+        #expect(log.authorizationRequests.count == 1)
+        let refreshes = log.requests(to: "/token").dropFirst().map { form($0.body) }
+        // The refresh token is kept when the server does not rotate it.
+        #expect(refreshes.map { $0["grant_type"] } == ["refresh_token", "refresh_token"] && refreshes.allSatisfy { $0["refresh_token"] == "r1" })
+        #expect(refreshes.allSatisfy { $0["resource"] == "https://mcp.example/mcp" && $0["client_id"] == "registered-client" })
+        #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-3"])
+    }
+
+    @Test func aFailedRefreshFallsBackToAuthorization() async throws {
+        let log = Log()
+        let client = oauth(Behavior(refreshToken: "r1", refreshFails: true), log: log)
+        #expect(try await client.handleChallenge(challenge()))
+        #expect(try await client.handleChallenge(challenge(sent: "Bearer token-1")))
+        #expect(log.authorizationRequests.count == 2)
+        #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-3"])
+    }
+
+    @Test func tokensAreRefreshedShortlyBeforeTheyExpire() async throws {
+        let log = Log()
+        // Expires within the refresh margin, so the next request refreshes first.
+        let client = oauth(Behavior(refreshToken: "r1", expiresIn: 10), log: log)
+        #expect(try await client.handleChallenge(challenge()))
+        #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-2"])
+        #expect(log.authorizationRequests.count == 1)
+        // Without a refresh token the expiring token is sent as is.
+        let plain = oauth(Behavior(expiresIn: 10), log: Log())
+        #expect(try await plain.handleChallenge(challenge()))
+        #expect(try await plain.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-1"])
     }
 }
 

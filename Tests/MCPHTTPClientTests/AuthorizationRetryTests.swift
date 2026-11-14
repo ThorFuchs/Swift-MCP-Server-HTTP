@@ -17,8 +17,8 @@ private final class Received: Sendable {
     var all: [String?] { values.withLock { $0 } }
 }
 
-/// Answers `401` with a Bearer challenge unless the request carries `Bearer good`; one request
-/// per connection.
+/// Answers `401` with a Bearer challenge, `403 insufficient_scope` for `Bearer weak` and `200`
+/// for `Bearer good`; one request per connection.
 private func withChallengeServer(_ body: (URL, Received) async throws -> Void) async throws {
     let server = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
         .bind(host: "127.0.0.1", port: 0) { channel in
@@ -52,6 +52,9 @@ private func respond(on connection: NIOAsyncChannel<HTTPServerRequestPart, HTTPS
             let body: String
             if authorization == "Bearer good" {
                 status = .ok; body = #"{"jsonrpc":"2.0","id":1,"result":{}}"#
+            } else if authorization == "Bearer weak" {
+                status = .forbidden; body = #"{"error":"insufficient_scope"}"#
+                headers.add(name: "WWW-Authenticate", value: #"Bearer error="insufficient_scope", scope="write""#)
             } else {
                 status = .unauthorized; body = #"{"error":"invalid_token"}"#
                 headers.add(name: "WWW-Authenticate", value: #"Bearer error="invalid_token", resource_metadata="http://127.0.0.1/prm""#)
@@ -112,6 +115,15 @@ private func request() throws -> OutgoingRequest {
             }
             #expect(received.all == [nil, "Bearer bad"])
             #expect(await authorizer.challenges.map(\.sentAuthorization) == [nil])
+        }
+    }
+
+    @Test func aStepUpMayFollowAFirstAuthorization() async throws {
+        try await withChallengeServer { url, received in
+            let authorizer = ScriptedAuthorizer(tokens: ["weak", "good"])
+            try await HTTPClientTransport(endpoint: url, timeout: .seconds(10), authorization: authorizer).exchange(try request()) { _ in }
+            #expect(received.all == [nil, "Bearer weak", "Bearer good"])
+            #expect(await authorizer.challenges.map(\.status) == [401, 403])
         }
     }
 
