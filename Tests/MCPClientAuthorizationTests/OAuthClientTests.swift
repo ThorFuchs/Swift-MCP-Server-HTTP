@@ -15,6 +15,7 @@ import Crypto
 private let endpoint = URL(string: "https://mcp.example/mcp")!
 private let issuer = "https://auth.example/tenant"
 private let redirect = URL(string: "http://127.0.0.1:8976/callback")!
+private let issuer2 = "https://auth2.example"
 
 /// How the fake authorization and resource servers behave.
 struct Behavior: Sendable {
@@ -43,6 +44,9 @@ private final class Log: Sendable {
     struct Entry: Sendable { let method: String; let url: String; let headers: [String: String]; let body: String }
     private let entries = Mutex<[Entry]>([])
     private let authorizations = Mutex<[URLComponents]>([])
+    private let server = Mutex(issuer)
+    /// The authorization server the protected resource metadata names; tests move it.
+    var authorizationServer: String { get { server.withLock { $0 } } set { server.withLock { $0 = newValue } } }
     func append(_ entry: Entry) { entries.withLock { $0.append(entry) } }
     func authorized(_ url: URL) { authorizations.withLock { $0.append(URLComponents(url: url, resolvingAgainstBaseURL: false)!) } }
     var all: [Entry] { entries.withLock { $0 } }
@@ -78,7 +82,14 @@ private struct FakeServers: AuthorizationHTTP {
         switch (method, url.absoluteString) {
         case ("GET", "https://mcp.example/.well-known/oauth-protected-resource/mcp"):
             let scopes = behavior.scopesSupported.map { #","scopes_supported":\#(list($0))"# } ?? ""
-            return json(200, #"{"resource":"\#(behavior.prmResource)","authorization_servers":["\#(issuer)"]\#(scopes)}"#)
+            return json(200, #"{"resource":"\#(behavior.prmResource)","authorization_servers":["\#(log.authorizationServer)"]\#(scopes)}"#)
+        case ("GET", "https://auth2.example/.well-known/oauth-authorization-server"):
+            return json(200, #"{"issuer":"\#(issuer2)","authorization_endpoint":"\#(issuer2)/authorize","token_endpoint":"\#(issuer2)/token","registration_endpoint":"\#(issuer2)/register","response_types_supported":["code"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"]}"#)
+        case ("POST", "\(issuer2)/register"):
+            return json(201, #"{"client_id":"second-client"}"#)
+        case ("POST", "\(issuer2)/token"):
+            let number = log.requests(to: "/token").count
+            return json(200, #"{"access_token":"token-\#(number)","token_type":"Bearer","expires_in":3600,"refresh_token":"r2"}"#)
         case ("GET", "https://auth.example/.well-known/oauth-authorization-server/tenant"):
             return json(200, """
                 {"issuer":"\(behavior.metadataIssuer)","authorization_endpoint":"\(issuer)/authorize?tenant=1",
@@ -128,13 +139,13 @@ private struct ApprovingUserAgent: AuthorizationUserAgent {
     }
 }
 
-private func oauth(_ behavior: Behavior = Behavior(), identity: ClientIdentity? = nil, log: Log,
+private func oauth(_ behavior: Behavior = Behavior(), identity: ClientIdentity? = nil, log: Log, store: (any TokenStore)? = nil,
                    configure: (inout OAuthClientConfiguration) -> Void = { _ in }) -> OAuthClient {
     var configuration = OAuthClientConfiguration(
         identity: identity ?? ClientIdentity(dynamicRegistration: DynamicRegistration(clientName: "tests")), redirectURI: redirect)
     configure(&configuration)
     return OAuthClient(endpoint: endpoint, configuration: configuration,
-        userAgent: ApprovingUserAgent(behavior: behavior, log: log), http: FakeServers(behavior: behavior, log: log))
+        userAgent: ApprovingUserAgent(behavior: behavior, log: log), tokenStore: store, http: FakeServers(behavior: behavior, log: log))
 }
 
 private func challenge(_ header: String = #"Bearer error="invalid_token", scope="mcp:read mcp:write""#, sent: String? = nil) -> HTTPAuthorizationChallenge {
@@ -384,6 +395,65 @@ private func insufficient(_ scope: String, sent: String) -> HTTPAuthorizationCha
         let plain = oauth(Behavior(expiresIn: 10), log: Log())
         #expect(try await plain.handleChallenge(challenge()))
         #expect(try await plain.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-1"])
+    }
+}
+
+@Suite struct OAuthClientLifecycle {
+    @Test func aNewAuthorizationServerGetsItsOwnClientAndNoOldCredentials() async throws {
+        let log = Log()
+        let store = InMemoryTokenStore()
+        let client = oauth(Behavior(refreshToken: "r1"), log: log, store: store)
+        #expect(try await client.handleChallenge(challenge()))
+        log.authorizationServer = issuer2
+        #expect(try await client.handleChallenge(challenge(sent: "Bearer token-1")))
+        #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-2"])
+
+        // No refresh at the old server, and nothing of the old client at the new one.
+        #expect(log.requests(to: "/token").map(\.url) == ["\(issuer)/token", "\(issuer2)/token"])
+        #expect(log.requests(to: "/register").map(\.url) == ["\(issuer)/register", "\(issuer2)/register"])
+        let second = log.all.filter { $0.url.hasPrefix(issuer2) }
+        #expect(!second.contains { $0.body.contains("registered-client") || $0.body.contains("r1") })
+        #expect(query(try #require(log.authorizationRequests.last))["client_id"] == "second-client")
+        let saved = try #require(await store.load(endpoint: endpoint))
+        #expect(saved.issuer == issuer2 && saved.clientID == "second-client" && saved.accessToken == "token-2" && saved.refreshToken == "r2")
+    }
+
+    @Test func storedAuthorizationSurvivesARestart() async throws {
+        let store = InMemoryTokenStore()
+        let first = Log()
+        #expect(try await oauth(Behavior(scopesSupported: ["mcp:read"], registrationSecret: "s", refreshToken: "r1"), log: first, store: store)
+            .handleChallenge(challenge(#"Bearer error="invalid_token""#)))
+        let saved = try #require(await store.load(endpoint: endpoint))
+        #expect(saved.issuer == issuer && saved.resource == "https://mcp.example/mcp" && saved.clientID == "registered-client")
+        #expect(saved.clientSecret == "s" && saved.authentication == .clientSecretBasic)
+        #expect(saved.accessToken == "token-1" && saved.refreshToken == "r1" && saved.scopes == ["mcp:read"])
+        #expect(try #require(saved.expiresAt).timeIntervalSinceNow > 3500)
+
+        // A new process: the stored token is sent without any request, and a rejection is
+        // answered by refreshing with the stored client instead of asking the user.
+        let second = Log()
+        let restarted = oauth(Behavior(registrationSecret: "s", refreshToken: "r1"), log: second, store: store)
+        #expect(try await restarted.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-1"])
+        #expect(second.all.isEmpty)
+        #expect(try await restarted.handleChallenge(challenge(sent: "Bearer token-1")))
+        #expect(second.authorizationRequests.isEmpty && second.requests(to: "/register").isEmpty)
+        let refresh = try #require(second.requests(to: "/token").first)
+        #expect(form(refresh.body)["grant_type"] == "refresh_token" && refresh.headers["authorization"]?.hasPrefix("Basic ") == true)
+        #expect(try await store.load(endpoint: endpoint)?.accessToken == "token-1")   // numbered per log: the refresh was the first token request
+
+        try await restarted.signOut()
+        #expect(try await store.load(endpoint: endpoint) == nil)
+        #expect(try await restarted.authorizationHeaders(for: endpoint).isEmpty)
+    }
+
+    @Test func storeFailuresAreReported() async throws {
+        struct Broken: TokenStore {
+            struct Failure: Error {}
+            func load(endpoint: URL) async throws -> StoredAuthorization? { throw Failure() }
+            func save(_ authorization: StoredAuthorization, endpoint: URL) async throws { throw Failure() }
+            func delete(endpoint: URL) async throws { throw Failure() }
+        }
+        await #expect(throws: Broken.Failure.self) { _ = try await oauth(log: Log(), store: Broken()).authorizationHeaders(for: endpoint) }
     }
 }
 

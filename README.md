@@ -14,9 +14,9 @@ against `Tools/Conformance/SwiftFixture`. Latest local run (2026-11-10, upstream
 **37/37 required scenarios passed**; the 3 pending core diagnostics passed; the 10 optional
 Tasks diagnostics fail because Tasks is not supported (not scored).
 
-`Scripts/client-conformance.sh` runs the client leg against the client fixture: 36 scenarios,
-including 24 `auth/*` scenarios (discovery, client identity, code flow, `iss`, scopes, step-up
-and `offline_access`). Latest local run (2026-11-14): **36/36 passed**.
+`Scripts/client-conformance.sh` runs the client leg against the client fixture: 37 scenarios,
+including 25 `auth/*` scenarios (discovery, client identity, code flow, `iss`, scopes, step-up,
+`offline_access` and authorization server migration).
 
 ## Known issues
 
