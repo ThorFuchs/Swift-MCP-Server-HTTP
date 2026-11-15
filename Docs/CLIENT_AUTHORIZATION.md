@@ -1,8 +1,8 @@
 # Client authorization (`MCPClientAuthorization`)
 
-OAuth 2.1 for MCP clients over HTTP, following ADR-0006 in the core repository. Slices A1–A4
-are implemented: discovery, client identity, the authorization code flow, scopes, step-up and
-refresh.
+OAuth 2.1 for MCP clients over HTTP, following ADR-0006 in the core repository. Slices A1–A5
+are implemented: discovery, client identity, the authorization code flow, scopes, step-up,
+refresh, a host token store and authorization server migration.
 
 ## Setup
 
@@ -12,7 +12,8 @@ let configuration = OAuthClientConfiguration(
         metadataDocument: URL(string: "https://app.example/oauth/client.json"),   // used when the server supports it
         dynamicRegistration: DynamicRegistration(clientName: "Example App")),     // fallback
     redirectURI: URL(string: "http://127.0.0.1:53682/callback")!)
-let oauth = OAuthClient(endpoint: endpoint, configuration: configuration, userAgent: browser)
+let oauth = OAuthClient(endpoint: endpoint, configuration: configuration, userAgent: browser,
+                        tokenStore: keychainStore)   // optional: tokens survive restarts
 let client = Client(transport: HTTPClientTransport(endpoint: endpoint, authorization: oauth))
 ```
 
@@ -56,6 +57,16 @@ The host supplies the `AuthorizationUserAgent`, which opens the authorization UR
   - A rejected token is refreshed first; only a failed refresh leads to a new authorization.
     Tokens are also refreshed 30 seconds before they expire. A refresh keeps the refresh token
     unless the server rotates it.
+- **A5 Token store.** A host `TokenStore` (for example backed by the Keychain) keeps a
+  `StoredAuthorization` per endpoint: issuer, resource, client identity, access and refresh
+  token, scopes and expiry. The client loads it before its first request and saves after every
+  authorization or refresh. It deletes it on `signOut()` and when the endpoint moves to another
+  authorization server. Store failures are reported to the caller and never silently ignored.
+  `InMemoryTokenStore` is for tests.
+- **A5 Migration.** On every `401` the client reads the protected resource metadata again. If
+  it names another authorization server or resource, the old tokens are discarded. The client
+  then identifies itself with the new server and authorizes there. Client identities are kept
+  per issuer, so neither a client ID nor a refresh token reaches another server (SEP-2352).
 - **Security.** Every URL must be `https`. `allowsInsecureLoopback` permits `http` to loopback
   hosts, for development only. Response bodies are bounded (`maximumDocumentBytes`, 64 KiB by
   default). All JSON goes through Swift-JSON. Tokens, codes and secrets are never logged.
@@ -64,14 +75,13 @@ The host supplies the `AuthorizationUserAgent`, which opens the authorization UR
 
 ## Not yet implemented
 
-- A5: authorization server migration and a host `TokenStore`; tokens live in memory today.
 - A6: client credentials, enterprise-managed authorization, workload identity federation and DPoP.
 - The `OAuthClient` uses the given `HTTPClient` for metadata, registration and token requests and
   follows its redirect configuration.
 
 ## Conformance
 
-`Scripts/client-conformance.sh` runs 24 `auth/*` referee scenarios:
+`Scripts/client-conformance.sh` runs 25 `auth/*` referee scenarios:
 
 - `metadata-default` and `metadata-var1`–`var3`
 - `metadata-issuer-mismatch` and `resource-mismatch`
@@ -81,3 +91,4 @@ The host supplies the `AuthorizationUserAgent`, which opens the authorization UR
 - `scope-from-www-authenticate`, `scope-from-scopes-supported` and `scope-omitted-when-undefined`
 - `scope-step-up` and `scope-retry-limit`
 - `offline-access-scope` and `offline-access-not-supported`
+- `authorization-server-migration`
