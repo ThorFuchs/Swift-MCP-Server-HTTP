@@ -37,6 +37,8 @@ struct Behavior: Sendable {
     var refreshToken: String? = nil
     var refreshFails = false
     var expiresIn = 3600
+    /// Overrides the published token endpoint of the first authorization server.
+    var tokenEndpoint: String? = nil
 }
 
 /// A request log shared by the fake servers and the user agent.
@@ -93,7 +95,7 @@ private struct FakeServers: AuthorizationHTTP {
         case ("GET", "https://auth.example/.well-known/oauth-authorization-server/tenant"):
             return json(200, """
                 {"issuer":"\(behavior.metadataIssuer)","authorization_endpoint":"\(issuer)/authorize?tenant=1",
-                 "token_endpoint":"\(issuer)/token","registration_endpoint":"\(issuer)/register",
+                 "token_endpoint":"\(behavior.tokenEndpoint ?? "\(issuer)/token")","registration_endpoint":"\(issuer)/register",
                  "response_types_supported":["code"],"code_challenge_methods_supported":["S256"],
                  "token_endpoint_auth_methods_supported":\(list(behavior.authMethods)),
                  "authorization_response_iss_parameter_supported":\(behavior.issSupported),
@@ -274,6 +276,68 @@ private func challenge(_ header: String = #"Bearer error="invalid_token", scope=
         let development = Discovery(http: FakeServers(behavior: Behavior(), log: Log()), insecureLoopback: true, maximumBytes: 1024)
         #expect(try development.serverCandidates("http://localhost:9000").count == 2)
         #expect(throws: OAuthClientError.insecureURL("http://auth.example")) { _ = try development.serverCandidates("http://auth.example") }
+    }
+
+    // Issue #10: the development loopback exception covers only real loopback literals.
+    @Test(arguments: [
+        "http://127.0.0.1", "http://127.0.0.1:8976/callback", "http://127.0.0.2", "http://127.255.255.255/x", "http://127.0.0.0",
+        "http://localhost", "http://LOCALHOST:9000/a", "http://[::1]", "http://[::1]:8080/mcp",
+    ])
+    func developmentLoopbackAcceptsLoopbackLiterals(url: String) throws {
+        let url = try #require(URL(string: url))
+        #expect(URLRules.isAllowed(url, insecureLoopback: true))
+        #expect(!URLRules.isAllowed(url, insecureLoopback: false))
+    }
+
+    @Test(arguments: [
+        // DNS names that only look like loopback literals.
+        "http://127.attacker.example", "http://127.attacker.example/token", "http://127.0.0.1.attacker.example",
+        "http://127.0.0.1.evil", "http://127.0.0.1.nip.io", "http://127.0.0.1-evil.example", "http://localhost.evil",
+        "http://localhost.evil.example", "http://evil-localhost", "http://my.localhost.example", "http://127.example.127",
+        // Malformed or non-canonical IPv4.
+        "http://127.1", "http://127.0.1", "http://127.0.0", "http://127.0.0.1.1", "http://127.0.0.256", "http://127.0.0.-1",
+        "http://127..0.1", "http://127.0.0.", "http://127.000.0.1", "http://127.0.0.01", "http://0177.0.0.1", "http://0x7f.0.0.1",
+        "http://2130706433",
+        // Not loopback at all.
+        "http://128.0.0.1", "http://126.255.255.255", "http://10.0.0.1", "http://0.0.0.0", "http://auth.example", "http://[::2]",
+        "http://[::]",
+        // Loopback, but with a fragment.
+        "http://127.0.0.1/x#f", "http://localhost/#",
+    ])
+    func developmentLoopbackRejectsEverythingElse(url: String) throws {
+        let url = try #require(URL(string: url))
+        #expect(!URLRules.isAllowed(url, insecureLoopback: true))
+        #expect(!URLRules.isAllowed(url, insecureLoopback: false))
+    }
+
+    @Test func httpsPolicyIsUnchangedByTheLoopbackRules() throws {
+        for text in ["https://127.attacker.example/token", "https://auth.example", "https://127.0.0.1:8443", "https://localhost"] {
+            let url = try #require(URL(string: text))
+            #expect(URLRules.isAllowed(url, insecureLoopback: false) && URLRules.isAllowed(url, insecureLoopback: true))
+        }
+        #expect(!URLRules.isAllowed(try #require(URL(string: "https://auth.example/#f")), insecureLoopback: true))
+        #expect(!URLRules.isAllowed(try #require(URL(string: "ftp://127.0.0.1")), insecureLoopback: true))
+    }
+
+    @Test(arguments: ["http://127.attacker.example/tenant", "http://127.0.0.1.attacker.example/tenant"])
+    func aLookalikeLoopbackIssuerIsNeverContacted(server: String) async throws {
+        let log = Log()
+        log.authorizationServer = server
+        await #expect(throws: OAuthClientError.insecureURL(server)) {
+            _ = try await oauth(log: log) { $0.allowsInsecureLoopback = true }.handleChallenge(challenge())
+        }
+        #expect(log.all.map(\.url) == ["https://mcp.example/.well-known/oauth-protected-resource/mcp"])
+        #expect(log.authorizationRequests.isEmpty)
+    }
+
+    @Test func aLookalikeLoopbackTokenEndpointReceivesNoCodeOrRegistration() async throws {
+        let log = Log()
+        let token = "http://127.attacker.example/token"
+        await #expect(throws: OAuthClientError.insecureURL(token)) {
+            _ = try await oauth(Behavior(tokenEndpoint: token), log: log) { $0.allowsInsecureLoopback = true }.handleChallenge(challenge())
+        }
+        #expect(log.requests(to: "/register").isEmpty && log.requests(to: "/token").isEmpty && log.authorizationRequests.isEmpty)
+        #expect(!log.all.contains { $0.url.contains("attacker") })
     }
 
     @Test func preRegisteredClientsAuthenticateWithFormEncodedBasicCredentials() async throws {
