@@ -7,6 +7,9 @@ let package = Package(
         .package(name: "Swift-MCP-Server-HTTP", path: "../../.."),
         .package(url: "https://github.com/ThorFuchs/Swift-MCP-Server.git", branch: "main"),
         .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
+        // FixtureRuntime uses CryptoKit on Apple and the compatible Crypto module on Linux.
+        // This is a direct dependency of the fixture target, not an assumed transitive import.
+        .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.16.1"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.12.1"),
     ],
@@ -17,6 +20,7 @@ let package = Package(
             .product(name: "MCPProtocol", package: "Swift-MCP-Server"),
             .product(name: "MCPServer", package: "Swift-MCP-Server"),
             .product(name: "MCPHTTP", package: "Swift-MCP-Server-HTTP"),
+            .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
             .product(name: "MCPServiceLifecycle", package: "Swift-MCP-Server"),
             .product(name: "JSON", package: "swift-json"),
         ]),

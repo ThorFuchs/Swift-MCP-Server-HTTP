@@ -21,6 +21,23 @@ The earlier **optimized** server fixture was reported to have a
 **reproduced**, not just a hypothesis, on the original #13 PR SHA
 `aa38b646bc977a7dc746c5a0cdccac8e6349423f` (see evidence below).
 
+## Post-merge Linux fixture follow-up
+
+The [#18 hotfix CI 44943304206](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/44943304206)
+on `a2f02d2263baeff176044418f55dbc4754573f1e` proceeded past
+the previous HTTP client `Data(buffer:)` compiler error and compiled
+the root HTTP package. It next failed compiling the **separate referee
+fixture** at
+`Tools/Conformance/SwiftFixture/Sources/ConformanceFixture/FixtureRuntime.swift:3`:
+`no such module 'CryptoKit'` on Linux (job `136965020798`).
+
+The fixture now imports `CryptoKit` on supported Apple toolchains or
+`Crypto` otherwise, and directly declares swift-crypto in its own
+package manifest with the `Crypto` target product enabled only for Linux.
+It does **not** claim any new platform support, change the HTTP transport
+or alter Core's dependency graph. The following CI run must establish
+whether both optimized fixtures can now be compiled.
+
 ## First #13 qualification results: reproducible failures
 
 [PR #17 CI 44940347042](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/44940347042)
