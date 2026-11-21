@@ -14,7 +14,10 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
 fi
 echo "Release qualification mode=$mode, jobs=$jobs"
-echo "Source: $(git rev-parse HEAD)"
+# GitHub's Linux container can own a checkout with a different UID.
+# Trust only this exact checkout for these two Git queries, never globally.
+source_sha="$(git -c safe.directory="$root" -C "$root" rev-parse --verify HEAD)"
+echo "Source: $source_sha"
 swift --version
 echo "Resolve package and fixture dependency graphs"
 swift package resolve
@@ -32,4 +35,4 @@ if [[ "$mode" == "full" ]]; then
   echo "Run optimized fixture tests"
   swift test -c release -j "$jobs" --package-path Tools/Conformance/SwiftFixture
 fi
-echo "Release qualification $mode passed at $(git rev-parse HEAD)"
+echo "Release qualification $mode passed at $source_sha"
