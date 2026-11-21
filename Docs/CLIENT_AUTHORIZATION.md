@@ -61,7 +61,11 @@ The host supplies the `AuthorizationUserAgent`, which opens the authorization UR
   `StoredAuthorization` per endpoint: issuer, resource, client identity, access and refresh
   token, scopes and expiry. The client loads it before its first request and saves after every
   authorization or refresh. It deletes it on `signOut()` and when the endpoint moves to another
-  authorization server. Store failures are reported to the caller and never silently ignored.
+  authorization server. **Persistence is a commit boundary:** a newly issued access token is
+  adopted in memory only after `TokenStore.save` succeeds. A save failure during a proactive
+  refresh is propagated to the caller; the previously committed token and stored authorization
+  remain intact, so a later request can retry. Remote refresh rejection remains a separate
+  condition that may fall back to the old token or an interactive authorization.
   `InMemoryTokenStore` is for tests.
 - **A5 Migration.** On every `401` the client reads the protected resource metadata again. If
   it names another authorization server or resource, the old tokens are discarded. The client
