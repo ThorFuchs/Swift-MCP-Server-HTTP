@@ -507,7 +507,7 @@ private func insufficient(_ scope: String, sent: String) -> HTTPAuthorizationCha
 
         // The original refresh token and issuer remain usable after a failed
         // save; a subsequent refresh can persist a consistent new credential.
-        #expect(try await client.authorizationHeaders(for: endpoint).map(\\.value) == ["Bearer token-3"])
+        #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-3"])
         #expect(try await store.load(endpoint: endpoint)?.accessToken == "token-3")
         #expect(log.authorizationRequests.count == 1)
     }
