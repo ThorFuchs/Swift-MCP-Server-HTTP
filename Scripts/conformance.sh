@@ -6,6 +6,11 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
+configuration="${MCP_HTTP_FIXTURE_CONFIGURATION:-debug}"
+case "$configuration" in
+    debug|release) ;;
+    *) echo "Unsupported MCP_HTTP_FIXTURE_CONFIGURATION: $configuration" >&2; exit 64 ;;
+esac
 out="${1:-$root/.build/conformance/$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$out"
 
@@ -14,8 +19,8 @@ mkdir -p "$out"
 referee="$root/Tools/Conformance/node_modules/.bin/conformance"
 
 # 2. Fixture server.
-swift build --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
-fixture="$(swift build --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
+swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
+fixture="$(swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
 
 # 3. Start it on 127.0.0.1:0 and wait for its readiness record.
 work="$(mktemp -d)"
@@ -33,8 +38,8 @@ done
 url="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["nonce"]==sys.argv[2]; print(d["url"])' "$work/ready.json" "$nonce")"
 echo "fixture ready at $url"
 
-# 4. Referee run, then an independent summary of every scenario's checks. The fixture is a
-#    debug build; catalog mutations re-prepare schemas, so scenarios get 90 s instead of 30 s.
+# 4. Referee run, then an independent summary of every scenario's checks. Catalog mutations re-prepare schemas; the existing 90 s referee
+#    timeout is unchanged for both debug and release fixtures.
 set +e
 "$referee" server --url "$url" --requirements 2026-07-28 --output-dir "$out/results" --timeout 90000 > "$out/referee.stdout" 2> "$out/referee.stderr"
 referee_exit=$?
