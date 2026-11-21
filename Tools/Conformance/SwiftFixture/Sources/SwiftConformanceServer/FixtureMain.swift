@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import ConformanceFixture
 import MCPTasks
 import Logging
@@ -12,7 +16,7 @@ import ServiceLifecycle
     enum Finished: Sendable { case runtime, deadline, timerCancelled }
     static func main() async {
         do { try await run() }
-        catch { FileHandle.standardError.write(Data("FIXTURE_FAILED\n".utf8)); Darwin.exit(1) }
+        catch { FileHandle.standardError.write(Data("FIXTURE_FAILED\n".utf8)); exit(1) }
     }
     static func run() async throws {
         let options = try FixtureOptions(arguments: Array(CommandLine.arguments.dropFirst()))
