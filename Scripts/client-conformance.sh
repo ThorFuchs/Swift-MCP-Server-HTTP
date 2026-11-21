@@ -7,12 +7,17 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
+configuration="${MCP_HTTP_FIXTURE_CONFIGURATION:-debug}"
+case "$configuration" in
+    debug|release) ;;
+    *) echo "Unsupported MCP_HTTP_FIXTURE_CONFIGURATION: $configuration" >&2; exit 64 ;;
+esac
 out="${1:-$root/.build/client-conformance/$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$out"
 (cd Tools/Conformance && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error)
 referee="$root/Tools/Conformance/node_modules/.bin/conformance"
-swift build --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceClient
-client="$(swift build --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceClient"
+swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceClient
+client="$(swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceClient"
 
 scenarios=(tools_call request-metadata sep-2322-client-request-state http-standard-headers
     http-custom-headers http-invalid-tool-headers json-schema-ref-no-deref json-schema-2020-12-preservation

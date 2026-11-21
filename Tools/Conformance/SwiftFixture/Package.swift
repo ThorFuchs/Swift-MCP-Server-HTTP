@@ -6,7 +6,7 @@ let package = Package(
     dependencies: [
         .package(name: "Swift-MCP-Server-HTTP", path: "../../.."),
         .package(url: "https://github.com/ThorFuchs/Swift-MCP-Server.git", branch: "main"),
-        .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.8.0"),
+        .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.16.1"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.12.1"),
     ],

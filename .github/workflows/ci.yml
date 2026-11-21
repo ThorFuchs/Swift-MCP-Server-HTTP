@@ -41,3 +41,66 @@ jobs:
           path: |
             ${{ runner.temp }}/conformance
             ${{ runner.temp }}/client-conformance
+
+  macos-27-release:
+    # Independent optimized build and actual release-binary referee verification.
+    if: >-
+      vars.HAS_MACOS27_RUNNER == 'true' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, macOS, macos-27]
+    timeout-minutes: 90
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.SWIFT_MCP_SERVER_READ_TOKEN }}@github.com/ThorFuchs/Swift-MCP-Server.git.insteadOf
+      GIT_CONFIG_VALUE_0: https://github.com/ThorFuchs/Swift-MCP-Server.git
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Record release toolchain
+        run: |
+          swift --version
+          uname -sm
+      - name: Optimize and test HTTP SDK and both conformance fixtures
+        run: bash Scripts/qualify-release.sh full
+      - name: Run official server referee against optimized fixture
+        env:
+          MCP_HTTP_FIXTURE_CONFIGURATION: release
+        run: Scripts/conformance.sh "$RUNNER_TEMP/release-conformance"
+      - name: Run official client referee against optimized fixture
+        env:
+          MCP_HTTP_FIXTURE_CONFIGURATION: release
+        run: Scripts/client-conformance.sh "$RUNNER_TEMP/release-client-conformance"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: release-conformance
+          path: |
+            ${{ runner.temp }}/release-conformance
+            ${{ runner.temp }}/release-client-conformance
+
+  linux-release-compile:
+    # Compile-only discovery, not a Linux runtime/conformance support claim.
+    # Access to the private Core dependency is restricted to same-repository PRs.
+    if: >-
+      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    container:
+      image: swift@sha256:23d9b28ad97fb1cf1999edc3a0cb265ee915ed42299a9344e7173d5a6d2b05f4
+    timeout-minutes: 60
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.SWIFT_MCP_SERVER_READ_TOKEN }}@github.com/ThorFuchs/Swift-MCP-Server.git.insteadOf
+      GIT_CONFIG_VALUE_0: https://github.com/ThorFuchs/Swift-MCP-Server.git
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Confirm Swift 6.4.2 and Python on Linux
+        run: |
+          swift --version | tee /tmp/http-swift-version.txt
+          grep -F 'Swift version 6.4.2' /tmp/http-swift-version.txt
+          apt-get update -qq
+          apt-get install -y --no-install-recommends python3
+      - name: Probe optimized HTTP and fixture Linux builds
+        run: bash Scripts/qualify-release.sh build-only
