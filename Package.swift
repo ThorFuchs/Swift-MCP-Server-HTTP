@@ -14,7 +14,7 @@ let package = Package(
     dependencies: [
         // Pre-1.0: follows the core's main branch; switches to `from: "1.0.0"` at the core release.
         .package(url: "https://github.com/ThorFuchs/Swift-MCP-Server.git", branch: "main"),
-        .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.8.0"),
+        .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
         // Upstream SwiftNIO. Early EOF on macOS 27 needs apple/swift-nio#3783 (see README, Known issues).
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
         .package(url: "https://github.com/swift-server/swift-http-server.git", revision: "0b8f1691b83a6cedbe1c15096e6b8d7f485d59a9", traits: []),
