@@ -76,9 +76,10 @@ public actor OAuthClient: HTTPClientAuthorizing {
     public func authorizationHeaders(for endpoint: URL) async throws -> [(name: String, value: String)] {
         guard endpoint == self.endpoint else { return [] }
         try await restoreIfNeeded()
-        // Refresh shortly before expiry; a failed refresh leaves the token for the server to reject.
+        // A remote refresh rejection may retain the old token, but persistence
+        // errors must reach the caller rather than silently desynchronizing storage.
         if let expiry, now() >= expiry - Self.refreshMargin, token?.refreshToken != nil, !authorizing {
-            await exclusively { _ = try? await self.refreshed() }
+            _ = try await exclusively { try await self.refreshed() }
         }
         guard let token else { return [] }
         return [("Authorization", "Bearer " + token.value)]
@@ -166,14 +167,18 @@ public actor OAuthClient: HTTPClientAuthorizing {
     }
 
     private func store(_ issued: AccessToken, scopes: [String]) async throws {
+        // Commit the new credentials in memory only after persistence succeeds.
+        // Otherwise an unsuccessful save could expose an unpersisted access token
+        // and leave the restored client with a different token after restart.
+        if let tokenStore, let session {
+            try await tokenStore.save(StoredAuthorization(issuer: session.issuer, resource: session.resource, clientID: session.client.clientID,
+                clientSecret: session.client.clientSecret, authentication: session.client.authentication, accessToken: issued.value,
+                refreshToken: issued.refreshToken, scopes: scopes, expiresAt: issued.expiresIn.map { Date().addingTimeInterval(TimeInterval($0)) }),
+                endpoint: endpoint)
+        }
         token = issued
         requestedScopes = scopes
         expiry = issued.expiresIn.map { now() + .seconds($0) }
-        guard let tokenStore, let session else { return }
-        try await tokenStore.save(StoredAuthorization(issuer: session.issuer, resource: session.resource, clientID: session.client.clientID,
-            clientSecret: session.client.clientSecret, authentication: session.client.authentication, accessToken: issued.value,
-            refreshToken: issued.refreshToken, scopes: scopes, expiresAt: issued.expiresIn.map { Date().addingTimeInterval(TimeInterval($0)) }),
-            endpoint: endpoint)
     }
 
     // MARK: Flows
