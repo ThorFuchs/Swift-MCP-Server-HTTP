@@ -115,11 +115,33 @@ struct AuthorizationFlow: Sendable {
         guard let received = URLComponents(url: redirect, resolvingAgainstBaseURL: false),
               let registered = URLComponents(url: expected, resolvingAgainstBaseURL: false),
               received.scheme?.lowercased() == registered.scheme?.lowercased(), received.host?.lowercased() == registered.host?.lowercased(),
-              received.port == registered.port, received.percentEncodedPath == registered.percentEncodedPath else {
+              received.port == registered.port, received.percentEncodedPath == registered.percentEncodedPath,
+              received.user == registered.user, received.password == registered.password,
+              received.fragment == nil, registered.fragment == nil else {
             throw OAuthClientError.invalidRedirect("the redirect does not match the redirect URI")
         }
+        // Registered fixed query parameters are part of the redirect URI.
+        // Reject duplicate OAuth response keys (including duplicate percent-
+        // encoded spellings) rather than choosing a first/last value.
+        let registeredItems = registered.queryItems ?? []
+        let receivedItems = received.queryItems ?? []
+        for fixed in registeredItems {
+            guard receivedItems.filter({ $0.name == fixed.name && $0.value == fixed.value }).count == 1 else {
+                throw OAuthClientError.invalidRedirect("the redirect does not match registered query parameters")
+            }
+        }
+        let fixedNames = Set(registeredItems.map(\.name))
+        let responseNames: Set<String> = ["code", "state", "iss", "error", "error_description"]
+        guard fixedNames.isDisjoint(with: responseNames) else {
+            throw OAuthClientError.invalidRedirect("registered redirect URI contains OAuth response parameters")
+        }
         var values: [String: String] = [:]
-        for item in received.queryItems ?? [] where values[item.name] == nil { values[item.name] = item.value ?? "" }
+        for item in receivedItems {
+            guard values[item.name] == nil else {
+                throw OAuthClientError.invalidRedirect("duplicate redirect query parameter")
+            }
+            values[item.name] = item.value ?? ""
+        }
         if let error = values["error"] { throw OAuthClientError.authorizationDenied(error: error, description: values["error_description"]) }
         guard values["state"] == state else { throw OAuthClientError.stateMismatch }
         if let issuer = values["iss"] {

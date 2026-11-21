@@ -27,6 +27,8 @@ struct Behavior: Sendable {
     var iss = Iss.correct
     var tamperState = false
     var redirectError: String? = nil
+    var duplicateRedirectKey: String? = nil
+    var redirectFragment = false
     var cimdSupported = false
     var authMethods = ["none"]
     var registrationMethod: String? = nil
@@ -136,7 +138,12 @@ private struct ApprovingUserAgent: AuthorizationUserAgent {
         case .omit: break
         case .value(let value): items.append(.init(name: "iss", value: value))
         }
+        if let duplicate = behavior.duplicateRedirectKey,
+           let original = items.first(where: { $0.name == duplicate }) {
+            items.append(original)
+        }
         response.queryItems = items
+        if behavior.redirectFragment { response.fragment = "unexpected" }
         return response.url!
     }
 }
@@ -446,6 +453,63 @@ private func insufficient(_ scope: String, sent: String) -> HTTPAuthorizationCha
         #expect(try await client.handleChallenge(challenge(sent: "Bearer token-1")))
         #expect(log.authorizationRequests.count == 2)
         #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-3"])
+    }
+
+
+    @Test(arguments: ["state", "code", "iss"])
+    func duplicateOAuthRedirectKeysAreRejected(_ key: String) async throws {
+        let log = Log()
+        let client = oauth(Behavior(duplicateRedirectKey: key), log: log)
+        await #expect(throws: OAuthClientError.self) {
+            _ = try await client.handleChallenge(challenge())
+        }
+        #expect(log.requests(to: "/token").isEmpty)
+    }
+
+    @Test func fragmentInAuthorizationRedirectIsRejected() async throws {
+        let log = Log()
+        let client = oauth(Behavior(redirectFragment: true), log: log)
+        await #expect(throws: OAuthClientError.self) {
+            _ = try await client.handleChallenge(challenge())
+        }
+        #expect(log.requests(to: "/token").isEmpty)
+    }
+
+    @Test func proactiveRefreshPersistenceFailureIsSurfacedAndRecovers() async throws {
+        actor FailingOnceStore: TokenStore {
+            struct SaveFailure: Error {}
+            private var saved: StoredAuthorization?
+            private var shouldFail = false
+            func load(endpoint: URL) async throws -> StoredAuthorization? { saved }
+            func save(_ authorization: StoredAuthorization, endpoint: URL) async throws {
+                if shouldFail {
+                    shouldFail = false
+                    throw SaveFailure()
+                }
+                saved = authorization
+            }
+            func delete(endpoint: URL) async throws { saved = nil }
+            func failNextSave() { shouldFail = true }
+        }
+
+        let log = Log()
+        let store = FailingOnceStore()
+        let client = oauth(Behavior(refreshToken: "r1", expiresIn: 10), log: log, store: store)
+        #expect(try await client.handleChallenge(challenge()))
+        #expect(try await store.load(endpoint: endpoint)?.accessToken == "token-1")
+
+        await store.failNextSave()
+        await #expect(throws: FailingOnceStore.SaveFailure.self) {
+            _ = try await client.authorizationHeaders(for: endpoint)
+        }
+        #expect(try await store.load(endpoint: endpoint)?.accessToken == "token-1")
+        #expect(await client.isAuthorized)
+
+        // The original refresh token and issuer remain usable after a failed
+        // save; a subsequent refresh can persist a consistent new credential.
+        #expect(try await client.authorizationHeaders(for: endpoint).map(\\.value) == ["Bearer token-3"])
+        #expect(try await store.load(endpoint: endpoint)?.accessToken == "token-3")
+        #expect(log.authorizationRequests.count == 1)
     }
 
     @Test func tokensAreRefreshedShortlyBeforeTheyExpire() async throws {
