@@ -174,9 +174,24 @@ enum URLRules {
         return scheme == "http" && insecureLoopback && isLoopback(url)
     }
 
+    /// Whether `url` names a loopback host: the literal `localhost`, the IPv6 literal `::1`, or an
+    /// IPv4 literal in 127.0.0.0/8 written as exactly four canonical decimal octets. Host names
+    /// that merely start with `127.` (such as `127.attacker.example`) are DNS names, not loopback.
     static func isLoopback(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
-        return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]" || host.hasPrefix("127.")
+        return host == "localhost" || host == "::1" || host == "[::1]" || isIPv4Loopback(host)
+    }
+
+    private static func isIPv4Loopback(_ host: String) -> Bool {
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard octets.count == 4 else { return false }
+        var values: [Int] = []
+        for octet in octets {
+            guard (1...3).contains(octet.count), octet.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  octet.count == 1 || octet.first != "0", let value = Int(octet), value <= 255 else { return false }
+            values.append(value)
+        }
+        return values[0] == 127
     }
 
     static func origin(_ components: URLComponents) -> String? {
