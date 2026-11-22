@@ -76,7 +76,7 @@ public actor HTTPTransport {
         let listener = NIOHTTPServer(configuration:nio)
         let handler = MCPHTTPRequestHandler(server:server,configuration:configuration,owners:requests)
         try await withThrowingTaskGroup(of:Completion.self) { group in
-            group.addTask { [configuration] in try await listener.serve(connectionHandler:MCPHTTPConnectionHandler(handler:handler)); return .listener }
+            group.addTask { [configuration] in try await listener.serve(connectionHandler:MCPHTTPConnectionHandler(handler:handler,limit:configuration.connections)); return .listener }
             group.addTask { [requests] in
                 let addresses = try await listener.listeningAddresses
                 guard addresses.count == 1, let bound = addresses.first else { throw CoreFailure.invalidPolicy }
@@ -105,11 +105,12 @@ private actor HTTPRequestOwners {
     private var writeTimeouts:UInt64 = 0
     var activity:HTTPTransport.Activity { .init(connections:channels.count,requests:active.count,writeTimeouts:writeTimeouts) }
     func writerTimedOut() { if writeTimeouts < UInt64.max { writeTimeouts += 1 } }
-    // NIOHTTPServerConfiguration.maxConnections rejects excess connections before
-    // this hook runs. Keep registration non-throwing: this connection's ~Copyable
-    // storage must be consumed by swift-http-server, including on cancellation.
-    // Request admission still checks 'stopped' in insert(_:) below.
-    func connect() -> UUID {
+    // Admission is a nonthrowing reservation. The caller must consume the
+    // noncopyable NIOHTTPServer.Connection even when admission is refused.
+    // NIO's maxConnections backs up accept(), but does not immediately reject
+    // already accepted sockets: preserve the strict public connection ceiling.
+    func connect(limit:Int) -> UUID? {
+        guard !Task.isCancelled, !stopped, channels.count < limit else { return nil }
         let token = UUID(); channels.insert(token); return token
     }
     func disconnect(_ token:UUID) { channels.remove(token) }
@@ -136,14 +137,30 @@ private actor HTTPRequestOwners {
 }
 
 private struct MCPHTTPConnectionHandler:NIOHTTPServerConnectionHandler {
-    let handler:MCPHTTPRequestHandler
+    let handler:MCPHTTPRequestHandler, limit:Int
     func handleConnection(connection:consuming sending NIOHTTPServer.Connection,context:NIOHTTPServer.ConnectionContext) async throws {
-        // HTTP versions and connection limits are configured and enforced by the
-        // listener (HTTP/1.1 only, maxConnections). No throwing operations are
-        // permitted before the consuming transfer of 'connection': otherwise an
-        // optimized cross-module cleanup can reference the non-public nested
-        // HTTPProtocol metadata accessor in swift-http-server.
-        let token = await handler.owners.connect()
+        // Both paths must transfer the ~Copyable connection to swift-http-server
+        // without throwing or dropping it in MCPHTTP. The upstream listener's
+        // maxConnections is backpressure, not rejection of accepted sockets.
+        guard let token = await handler.owners.connect(limit:limit) else {
+            // Cancellation closes an idle connection without servicing requests.
+            // The child waits on a gate so it cannot enter the upstream request
+            // loop until cancellation is guaranteed, even on a busy executor.
+            let gate = AsyncStream<Void>.makeStream(bufferingPolicy:.bufferingNewest(1))
+            let rejected = Task {
+                for await _ in gate.stream { break }
+                do {
+                    try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
+                        .handleConnection(connection:connection,context:context)
+                } catch {
+                    // Expected when closing the rejected, already-cancelled child.
+                }
+            }
+            rejected.cancel()
+            gate.continuation.finish()
+            await rejected.value
+            return
+        }
         // Keep the noncopyable Connection's internal destruction in swift-http-server.
         do {
             try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
