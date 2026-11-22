@@ -24,7 +24,7 @@ including 25 `auth/*` scenarios (discovery, client identity, code flow, `iss`, s
   or write, because upstream SwiftNIO disables early EOF on Darwin. Fix proposed in
   [apple/swift-nio#3783](https://github.com/apple/swift-nio/pull/3783); three tests are marked
   `withKnownIssue` until it ships.
-- `swift-http-server` is pinned to a revision (pre-release dependency).
+- `swift-http-server` 0.5.0 is selected as a proposed exact release dependency; its macOS optimized-link and lifecycle qualification is still pending. See [release qualification](Docs/RELEASE_QUALIFICATION.md).
 
 ## Third-party directory listing
 

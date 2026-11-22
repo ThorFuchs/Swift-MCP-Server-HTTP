@@ -70,6 +70,12 @@ gates on its exact SHA before re-evaluating the supported-platform
 contract. **No 1.0 release claim is authorized while the optimized
 macOS fixture fails to link.**
 
+## Candidate published swift-http-server 0.5.0 upgrade
+
+The HTTP SDK now **proposes** the official `swift-http-server` 0.5.0 tag instead of the prior October 8 revision. Both root and conformance fixture `Package.resolved` are explicitly updated to the published tag's Git commit `3e50d9404eb916cd6d030b81af90fdaec73efebc`. `Scripts/check-release-graph.py` rejects a mismatch in either the version or revision. The SwiftNIO early-EOF patch is **not** part of swift-http-server 0.5.0 and HTTP #12 remains independent.
+
+This candidate is not qualified merely by updating the manifests: verify clean SwiftPM resolution, public `NIOHTTPServer` API compatibility, macOS debug suite, macOS optimized ARM64 fixture links and tests, full server/client referee scenarios, plus the Linux compile-only gate. The ownership experiment of HTTP PR #20 is independently reviewed and not included in this dependency-only change. Do not merge a red PR or claim release readiness.
+
 ## Qualified build procedure
 
 `bash Scripts/qualify-release.sh full` (macOS 27) performs explicit
@@ -102,7 +108,7 @@ run-time resolution**.
 | --- | --- | --- |
 | Swift-MCP-Server Core | `branch: "main"` | **Mutable; not suitable for 1.0**; convert after approved Core version in #14 |
 | Swift-JSON | aligned with Core at `from: "1.9.0"` | Shared fixture/root revision required |
-| swift-http-server | raw SHA `0b8f1691b83a6cedbe1c15096e6b8d7f485d59a9` | Based on 2026-10-08 source; upstream 0.5.0 released 2026-11-04; do not upgrade without tests |
+| swift-http-server | **0.5.0 exact** (tag `3e50d9404eb916cd6d030b81af90fdaec73efebc`, issued 2026-11-04) | Candidate upgrade in a separate PR; must still pass optimized ARM64 fixture links, tests, and referees before release |
 | swift-nio | `from: "2.104.0"`, baseline resolver 2.105.0 | macOS early EOF unresolved in #12 |
 | swift-http-api-proposal | `exact: "0.2.0"` | Dependency compatibility still requires proof |
 | swift-collections | `exact: "1.6.0"` | 1.7 borrowing iterator change previously incompatible |

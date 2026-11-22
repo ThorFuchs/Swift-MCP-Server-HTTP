@@ -17,7 +17,7 @@ let package = Package(
         .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
         // Upstream SwiftNIO. Early EOF on macOS 27 needs apple/swift-nio#3783 (see README, Known issues).
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
-        .package(url: "https://github.com/swift-server/swift-http-server.git", revision: "0b8f1691b83a6cedbe1c15096e6b8d7f485d59a9", traits: []),
+        .package(url: "https://github.com/swift-server/swift-http-server.git", exact: "0.5.0", traits: []),
         .package(url: "https://github.com/apple/swift-http-api-proposal.git", exact: "0.2.0", traits: []),
         // BasicContainers' borrowing iterators changed incompatibly in swift-collections 1.7.
         .package(url: "https://github.com/apple/swift-collections.git", exact: "1.6.0"),

@@ -12,7 +12,8 @@ SHARED = (
     "swift-mcp-server", "swift-json", "swift-http-server", "swift-nio",
     "swift-http-api-proposal", "swift-collections",
 )
-HTTP_SERVER_SHA = "0b8f1691b83a6cedbe1c15096e6b8d7f485d59a9"
+HTTP_SERVER_SHA = "3e50d9404eb916cd6d030b81af90fdaec73efebc"
+HTTP_SERVER_VERSION = "0.5.0"
 
 
 def pins(path):
@@ -36,8 +37,9 @@ def main():
         if not r.get("revision") or r["revision"] != f.get("revision"):
             raise ValueError(f"root/fixture {identity} revision mismatch: {r} / {f}")
         print(f"{identity} = {r['revision']} ({r.get('version', r.get('branch', 'revision'))})")
-    if root["swift-http-server"]["revision"] != HTTP_SERVER_SHA:
-        raise ValueError("swift-http-server revision unexpectedly changed")
+    if (root["swift-http-server"]["revision"] != HTTP_SERVER_SHA
+            or root["swift-http-server"].get("version") != HTTP_SERVER_VERSION):
+        raise ValueError("swift-http-server must resolve to audited 0.5.0 release tag")
     if root["swift-mcp-server"].get("branch") != "main":
         raise ValueError("Core dependency contract changed; conduct HTTP #14 audit")
     json_version = root["swift-json"].get("version", "")

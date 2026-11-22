@@ -105,7 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swift-server/swift-http-server.git",
       "state" : {
-        "revision" : "0b8f1691b83a6cedbe1c15096e6b8d7f485d59a9"
+        "revision" : "3e50d9404eb916cd6d030b81af90fdaec73efebc",
+        "version" : "0.5.0"
       }
     },
     {
