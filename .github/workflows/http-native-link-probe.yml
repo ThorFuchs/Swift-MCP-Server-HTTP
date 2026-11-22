@@ -1,0 +1,29 @@
+name: HTTP native backend link comparison
+on:
+  push:
+    branches: [diagnostic/http-link-native-2026-11-22]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: http-native-link-probe-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-comparison:
+    if: vars.HAS_MACOS27_RUNNER == 'true'
+    runs-on: [self-hosted, macOS, macos-27]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Compare native release links with the prior locked graphs
+        env:
+          SWIFT_BUILD_JOBS: '2'
+        run: bash Scripts/probe-http-release-link.sh "$RUNNER_TEMP/http-native-link-${{ github.run_id }}-${{ github.run_attempt }}" native
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: http-native-link-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/http-native-link-${{ github.run_id }}-${{ github.run_attempt }}/evidence
+          retention-days: 7

@@ -4,8 +4,10 @@ set -euo pipefail
 
 variant=${1:-published}
 backend=${2:-swiftbuild}
-case "$variant" in baseline|published) ;; *) printf 'Usage: bash run.sh [baseline|published] [swiftbuild|native] [output-root]\n' >&2; exit 2 ;; esac
+configurations=${4:-both}
+case "$variant" in baseline|published) ;; *) printf 'Usage: bash run.sh [baseline|published] [swiftbuild|native] [output-root] [both|release]\n' >&2; exit 2 ;; esac
 case "$backend" in swiftbuild|native) ;; *) printf 'Unknown build backend: %s\n' "$backend" >&2; exit 2 ;; esac
+case "$configurations" in both) configuration_list=(debug release) ;; release) configuration_list=(release) ;; *) printf 'Unknown configuration selection: %s\n' "$configurations" >&2; exit 2 ;; esac
 if [[ $(uname -s) != Darwin ]]; then
     printf 'This probe runner targets the observed macOS linker failure.\n' >&2
     exit 2
@@ -25,6 +27,8 @@ outcome=setup_incomplete
 trap 'result=$?; printf "outcome=%s\nexit_code=%s\n" "$outcome" "$result" > "$evidence/summary.txt"' EXIT
 cp "$script_dir/Package.swift" "$output/package/Package.swift"
 cp -R "$script_dir/Sources" "$output/package/Sources"
+cp "$script_dir/Package.resolved" "$output/package/Package.resolved"
+cp "$script_dir/Package.resolved" "$evidence/seed.Package.resolved"
 if [[ $variant == baseline ]]; then
     python3 - "$output/package/Package.swift" <<'PY'
 import pathlib, sys
@@ -48,6 +52,7 @@ SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
     xcode-select -p
     xcodebuild -version
     swift --version
+    swift package --version
     xcrun --sdk macosx --show-sdk-version
     printf 'variant=%s\nbackend=%s\nSDKROOT=%s\n' "$variant" "$backend" "$SDKROOT"
     shasum -a 256 "$output/package/Package.swift"
@@ -66,9 +71,15 @@ else
 fi
 cp "$output/package/Package.resolved" "$evidence/Package.resolved"
 shasum -a 256 "$evidence/Package.resolved" >"$evidence/lock-sha256.txt"
+if [[ $variant == published ]] && ! cmp -s "$evidence/seed.Package.resolved" "$evidence/Package.resolved"; then
+    printf 'seed-drift\tall\t0\t1\tdependency_drift\n' >>"$evidence/results.tsv"
+    outcome=published_resolution_changed_seed_lock
+    printf 'Published probe resolution changed the prior Swift Build lock.\n' >&2
+    exit 1
+fi
 
 failures=0
-for configuration in debug release; do
+for configuration in "${configuration_list[@]}"; do
     for product in ConnectionTransferProbe ConnectionDropProbe ReaderDropProbe ReaderCollectProbe; do
         case "$product" in
             ConnectionTransferProbe) symbol=transferConnection ;;
@@ -92,7 +103,8 @@ for configuration in debug release; do
                 binary="$binary_dir/lib$product.dylib"
                 printf '%s\n' "$binary" >>"$evidence/binaries.txt"
                 if [[ -f "$binary" ]] && xcrun nm -gU "$binary" >"$evidence/logs/$configuration-$product-exports.txt" 2>&1 \
-                    && grep -Fq "$symbol" "$evidence/logs/$configuration-$product-exports.txt"; then
+                    && xcrun swift-demangle <"$evidence/logs/$configuration-$product-exports.txt" >"$evidence/logs/$configuration-$product-exports-demangled.txt" 2>&1 \
+                    && grep -Fq "$product.$symbol(" "$evidence/logs/$configuration-$product-exports-demangled.txt"; then
                     classification=linked_and_export_verified
                 else
                     verification=1
@@ -120,7 +132,7 @@ PY
         printf '[%s/%s] %s: build=%s verification=%s %s\n' "$variant" "$backend" "$configuration-$product" "$status" "$verification" "$classification"
         if [[ $status -ne 0 || $verification -ne 0 ]]; then
             tail -n 35 "$log"
-            for detail in "$evidence/logs/$configuration-$product-bin-path.log" "$evidence/logs/$configuration-$product-exports.txt"; do
+            for detail in "$evidence/logs/$configuration-$product-bin-path.log" "$evidence/logs/$configuration-$product-exports-demangled.txt"; do
                 if [[ -s "$detail" ]]; then tail -n 10 "$detail"; fi
             done
         fi

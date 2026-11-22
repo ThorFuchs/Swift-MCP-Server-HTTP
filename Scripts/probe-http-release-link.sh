@@ -4,6 +4,15 @@
 set -euo pipefail
 
 tools_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+backend=${2:-default}
+case "$backend" in default|native) ;; *) printf 'Unknown diagnostic backend: %s\n' "$backend" >&2; exit 64 ;; esac
+swift_build() {
+    # Avoid expanding an empty array with set -u in macOS's Bash 3.2.
+    case "$backend" in
+        native) swift build --build-system native "$@" ;;
+        default) swift build "$@" ;;
+    esac
+}
 output=${1:-$(mktemp -d "${TMPDIR:-/tmp}/mcp-http-link.XXXXXX")}
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
@@ -30,10 +39,11 @@ export GIT_TERMINAL_PROMPT=0
     xcode-select -p
     xcodebuild -version
     swift --version
+    swift package --version
     xcrun --sdk macosx --show-sdk-version
     sysctl -n hw.model hw.logicalcpu hw.memsize
     sysctl -n vm.loadavg
-    printf 'build_backend=toolchain default (unchanged)\njobs=%s\nSDKROOT=%s\n' "$jobs" "$SDKROOT"
+    printf 'build_backend=%s\njobs=%s\nSDKROOT=%s\n' "$backend" "$jobs" "$SDKROOT"
     git -C "$tools_root" rev-parse HEAD
 } >"$evidence/host.txt" 2>&1
 printf 'step\texit_code\n' >"$evidence/results.tsv"
@@ -81,7 +91,7 @@ record_step graph python3 -I "$checkout/Scripts/check-release-graph.py" "$checko
 # Compare the worktree to the intentionally combined index, not to PR20's old locks.
 record_step lock-drift git -C "$checkout" diff --exit-code -- Package.resolved Tools/Conformance/SwiftFixture/Package.resolved
 
-if record_step release-server swift build -c release -j "$jobs" --package-path "$fixture" --product SwiftConformanceServer -v; then
+if record_step release-server swift_build -c release -j "$jobs" --package-path "$fixture" --product SwiftConformanceServer -v; then
     original_status=0
 else
     original_status=$?
@@ -98,39 +108,59 @@ if ! record_step final-lock-drift git -C "$checkout" diff --exit-code -- Package
     exit 1
 fi
 if [[ $original_status -eq 0 ]]; then
-    if binary_dir=$(swift build -c release --package-path "$fixture" --show-bin-path 2>"$evidence/bin-path.log") \
+    if binary_dir=$(swift_build -c release --package-path "$fixture" --show-bin-path 2>"$evidence/bin-path.log") \
         && [[ -x "$binary_dir/SwiftConformanceServer" ]]; then
         printf '%s\n' "$binary_dir/SwiftConformanceServer" >"$evidence/binary.txt"
         outcome=combined_server_linked_runtime_unqualified
         printf 'Combined server linked. Runtime/release qualification remains separate.\n'
-        exit 0
+        if [[ $backend == default ]]; then exit 0; fi
+    else
+        outcome=build_reported_success_but_binary_unverified
+        exit 1
     fi
-    outcome=build_reported_success_but_binary_unverified
-    exit 1
 fi
 
-outcome=original_build_failed_without_matching_metadata
+if [[ $original_status -ne 0 ]]; then outcome=original_build_failed_without_matching_metadata; fi
+matching=0
 if python3 - "$evidence/link/diagnostic.json" <<'PY'
 import json, pathlib, sys
 raise SystemExit(0 if json.loads(pathlib.Path(sys.argv[1]).read_text())["matching_undefined_metadata"] else 1)
 PY
 then
-    outcome=original_matching_link_failure
+    matching=1
+    if [[ $original_status -ne 0 ]]; then outcome=original_matching_link_failure; fi
+fi
+if [[ $matching -eq 1 || $backend == native ]]; then
     mini="$tools_root/Tools/HTTPLinkReproducer/run.sh"
     if [[ -f "$mini" ]]; then
         mkdir "$work/minis"
-        if record_step mini-runner bash "$mini" published swiftbuild "$work/minis"; then mini_status=0; else mini_status=$?; fi
+        mini_backend=swiftbuild
+        if [[ $backend == native ]]; then mini_backend=native; fi
+        if record_step mini-runner bash "$mini" published "$mini_backend" "$work/minis" release; then mini_status=0; else mini_status=$?; fi
         python3 - "$work/minis" "$evidence/minis" <<'PY'
 import pathlib, shutil, sys
 source, target = map(pathlib.Path, sys.argv[1:])
 for run in source.iterdir():
     if (run / "evidence").is_dir():
         shutil.copytree(run / "evidence", target / run.name)
+        results = run / "evidence" / "results.tsv"
+        if results.exists():
+            print(results.read_text())
 PY
     else
         mini_status=not_installed
         printf 'Matching original symbols found; optional mini-probe is not installed.\n' >"$evidence/mini-runner.log"
     fi
+fi
+if [[ $backend == native && $original_status -eq 0 && $mini_status == 0 ]]; then
+    outcome=native_combined_and_mini_linked_runtime_unqualified
+    printf 'Native combined server and all four native release probes linked. Default-backend failure remains separate.\n'
+    exit 0
+fi
+if [[ $original_status -eq 0 ]]; then
+    outcome=combined_linked_mini_diagnostic_failed
+    printf 'Combined server linked; at least one mini diagnostic or verification failed.\n'
+    exit 1
 fi
 printf 'Original server build remains failed. Mini-probe results are diagnostic, not a fix.\n'
 exit 1

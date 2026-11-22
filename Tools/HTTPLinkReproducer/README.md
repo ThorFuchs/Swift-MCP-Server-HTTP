@@ -1,9 +1,16 @@
 # External HTTP ownership/link probes
 
-**Status: candidate reproducer, source-reviewed but not compiled.** The engineering
-environment has no Swift toolchain. A passing candidate is not proof that the
-original executable failure is fixed; the conformance server remains the primary
-reproducer.
+These are diagnostic consumer/link probes. A passing miniature product is not
+proof that the original executable failure is fixed; the conformance server
+remains the primary integration reproducer.
+
+[CI 45073773028](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/45073773028)
+compiled and linked all four Debug products and the Release ConnectionTransfer
+control. The three other Release products reproduced the expected undefined
+metadata accessors with Swift Build. The original export verifier incorrectly
+searched mangled symbols for unabbreviated function names; those five verification
+failures were harness errors. Verification now searches demangled defined exports.
+Do not reinterpret the three actual Release link failures as verifier errors.
 
 These four small products isolate use of public `NIOHTTPServer` noncopyable values
 from MCP, authentication, admission state, and live networking. Each is an explicit
@@ -53,7 +60,7 @@ Only after that, use the second build backend to separate Swift Build invocation
 or linkage from target/toolchain code generation:
 
 ```bash
-bash run.sh published native
+bash run.sh published native "$HOME/MCP-Link-Probes" release
 ```
 
 The original macOS CI output uses Swift Build's `.build/out` and
@@ -61,10 +68,18 @@ The original macOS CI output uses Swift Build's `.build/out` and
 Record `swift build --help` if the selected toolchain rejects a backend. These are
 diagnostic comparisons, not a proposal to silently change the release build system.
 
-The manifest pins HTTP APIs 0.2.0, NIO 2.105.0 and Collections 1.6.0, matching the
-important shared versions of the original failure. The fresh miniature graph is
-smaller than the full MCP graph; compare every shared revision in the recorded
-`Package.resolved` files before claiming an isolated A/B result.
+The committed `Package.resolved` preserves the original miniature Swift Build
+graph. A published run seeds that file and fails if resolution or building changes
+it. The baseline variant intentionally changes the HTTP-server revision before
+resolution and records its resulting graph separately. The optional final argument
+`release` builds only Release; the default `both` builds Debug and Release.
+
+The miniature graph has 24 pins; the full MCP fixture has 29. HTTP APIs 0.2.0,
+HTTP-server 0.5.0, NIO 2.105.0 and Collections 1.6.0 match. The original miniature
+uses Crypto 5.1.2, swift-system 1.9.0 and swift-log 1.17.2, while the original full
+fixture uses 4.5.2, 1.8.1 and 1.17.0 respectively. The backend comparison must keep
+each graph unchanged relative to its own prior run. It does not claim the miniature
+and full fixture have identical dependency graphs.
 
 ## Evidence needed from a matching failure
 

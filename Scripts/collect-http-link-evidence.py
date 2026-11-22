@@ -48,7 +48,7 @@ if build.exists():
     # dependency objects or copying gigabytes of the build tree into CI artifacts.
     objects = [
         path for path in sorted(build.rglob("*.o"))
-        if path.name in {"MCPHTTP.o", "NIOHTTPServer.o"}
+        if path.name in {"MCPHTTP.o", "NIOHTTPServer.o", "MCPHTTP.swift.o", "NIOHTTPServer.swift.o"}
         or any(name in path.name for name in ["NIOHTTPServerReader", "NIOHTTPServer+Connection", "HTTPTransport", "HTTPRequestReader"])
     ]
     raw_parts = []
