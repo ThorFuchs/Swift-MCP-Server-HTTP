@@ -26,6 +26,13 @@ including 25 `auth/*` scenarios (discovery, client identity, code flow, `iss`, s
   `withKnownIssue` until it ships.
 - `swift-http-server` is pinned to a revision (pre-release dependency).
 
+## Third-party directory listing
+
+[![M8ven Score](https://m8ven.ai/badge/mcp/thorfuchs-swift-mcp-server-http-ztmm8c?v=05adb4b4f7e0aa9c82d6b34670d22057)](https://m8ven.ai/mcp/thorfuchs-swift-mcp-server-http-ztmm8c?s=readme)
+
+This is a Swift SDK package, not a hosted MCP server. M8ven's third-party directory
+score is not a security certification.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
