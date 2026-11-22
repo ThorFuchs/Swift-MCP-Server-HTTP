@@ -19,8 +19,8 @@ mkdir -p "$out"
 referee="$root/Tools/Conformance/node_modules/.bin/conformance"
 
 # 2. Fixture server.
-swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
-fixture="$(swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
+swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
+fixture="$(swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
 
 # 3. Start it on 127.0.0.1:0 and wait for its readiness record.
 work="$(mktemp -d)"

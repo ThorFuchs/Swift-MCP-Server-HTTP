@@ -16,8 +16,8 @@ out="${1:-$root/.build/client-conformance/$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$out"
 (cd Tools/Conformance && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error)
 referee="$root/Tools/Conformance/node_modules/.bin/conformance"
-swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceClient
-client="$(swift build -c "$configuration" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceClient"
+swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceClient
+client="$(swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceClient"
 
 scenarios=(tools_call request-metadata sep-2322-client-request-state http-standard-headers
     http-custom-headers http-invalid-tool-headers json-schema-ref-no-deref json-schema-2020-12-preservation
