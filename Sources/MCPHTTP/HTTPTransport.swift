@@ -143,22 +143,14 @@ private struct MCPHTTPConnectionHandler:NIOHTTPServerConnectionHandler {
         // without throwing or dropping it in MCPHTTP. The upstream listener's
         // maxConnections is backpressure, not rejection of accepted sockets.
         guard let token = await handler.owners.connect(limit:limit) else {
-            // Cancellation closes an idle connection without servicing requests.
-            // The child waits on a gate so it cannot enter the upstream request
-            // loop until cancellation is guaranteed, even on a busy executor.
-            let gate = AsyncStream<Void>.makeStream(bufferingPolicy:.bufferingNewest(1))
-            let rejected = Task {
-                for await _ in gate.stream { break }
-                do {
-                    try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
-                        .handleConnection(connection:connection,context:context)
-                } catch {
-                    // Expected when closing the rejected, already-cancelled child.
-                }
-            }
-            rejected.cancel()
-            gate.continuation.finish()
-            await rejected.value
+            // This callback already runs as an upstream per-connection child
+            // task. Cancelling only *this* task avoids escaping the ~Copyable
+            // connection into a Task closure, which Swift 6.4 forbids.
+            // The upstream request loop observes cancellation before reading
+            // a request; its dispatcher retains ownership of channel teardown.
+            withUnsafeCurrentTask { $0?.cancel() }
+            try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
+                .handleConnection(connection:connection,context:context)
             return
         }
         // Keep the noncopyable Connection's internal destruction in swift-http-server.
