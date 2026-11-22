@@ -1,0 +1,29 @@
+name: Stalled writer lifecycle probe
+on:
+  push:
+    branches: [diagnostic/stalled-writer-lifecycle-2026-11-22]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stalled-writer-probe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lifecycle:
+    if: vars.HAS_MACOS27_RUNNER == 'true'
+    runs-on: [self-hosted, macOS, macos-27]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Observe the original test without changing its expectations
+        env:
+          SWIFT_BUILD_JOBS: '2'
+        run: bash Scripts/probe-stalled-writer.sh "$RUNNER_TEMP/stalled-writer-probe-${{ github.run_id }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: stalled-writer-probe-${{ github.run_id }}
+          path: ${{ runner.temp }}/stalled-writer-probe-${{ github.run_id }}
+          retention-days: 7

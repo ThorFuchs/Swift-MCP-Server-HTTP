@@ -105,6 +105,11 @@ private final class HTTPCallCounter:Sendable {
     func increment() { value.withLock { $0 += 1 } }
     var count:Int { value.withLock { $0 } }
 }
+private final class HTTPStalledProviderExit: Sendable {
+    private let value = Mutex("not-exited")
+    func record(_ event: String) { value.withLock { $0 = event } }
+    var snapshot: String { value.withLock { $0 } }
+}
 private struct HTTPVerifier:TokenVerifier {
     let calls:HTTPCallCounter
     func verify(_ bearerToken:String,forResource resource:ScalarText) async throws -> VerifiedAccessToken {
@@ -533,17 +538,33 @@ private func waitHTTP(_ condition:@escaping @Sendable () async -> Bool,milliseco
 
     @Test func nativeHTTPStalledWriterClosesAndReleasesTerminalOwnership() async throws {
         let entered = HTTPCallCounter(),cancelled = HTTPCallCounter()
+        let attempted = HTTPCallCounter(),admitted = HTTPCallCounter(),filtered = HTTPCallCounter()
+        let returned = HTTPCallCounter(),cancellationErrors = HTTPCallCounter(),otherErrors = HTTPCallCounter()
+        let taskCancelledAtFailure = HTTPCallCounter(),taskCancelledAtReturn = HTTPCallCounter()
+        let providerExit = HTTPStalledProviderExit()
         let tool = ToolRegistration(definition:try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,context in
             entered.increment()
+            let providerStarted = ContinuousClock.now
             do {
                 // Multiple finite frames exceed the real socket send window. One
                 // large terminal result would instead test the terminal work cap.
                 for _ in 1...32 {
-                    try await context.log(.debug,data:.string(String(repeating:"x",count:80_000)))
+                    attempted.increment()
+                    let accepted = try await context.log(.debug,data:.string(String(repeating:"x",count:80_000)))
+                    if accepted { admitted.increment() } else { filtered.increment() }
                     try await Task.sleep(for:.milliseconds(2))
                 }
-            } catch { print("STALLED_PROVIDER_FAILURE \(error)"); cancelled.increment(); throw error }
-            return try parseHTTP(#"{"resultType":"complete","content":[]}"#)
+            } catch {
+                if error is CancellationError { cancellationErrors.increment() } else { otherErrors.increment() }
+                if Task.isCancelled { taskCancelledAtFailure.increment() }
+                providerExit.record("failure@\(providerStarted.duration(to:ContinuousClock.now))")
+                print("STALLED_PROVIDER_FAILURE \(error)"); cancelled.increment(); throw error
+            }
+            let result = try parseHTTP(#"{"resultType":"complete","content":[]}"#)
+            if Task.isCancelled { taskCancelledAtReturn.increment() }
+            returned.increment()
+            providerExit.record("return@\(providerStarted.duration(to:ContinuousClock.now))")
+            return result
         }
         let core = try await httpCore(tools:[tool],events:EventPolicy(queuedBytes:2_097_152,principalBytes:4_194_304,logIntervalMilliseconds:1,logRedactor:{$0}))
         try await withHTTP(core,mode:.sse,io:1000) { address,transport in
@@ -557,6 +578,7 @@ private func waitHTTP(_ condition:@escaping @Sendable () async -> Bool,milliseco
             let partial = try await socket.receive()
             let timedOut = await transport.activity.writeTimeouts
             print("STALLED_WRITER timeout=\(timedOut) cancelled=\(cancelled.count) received=\(partial.count)")
+            print("STALLED_LIFECYCLE attempted=\(attempted.count) admitted=\(admitted.count) filtered=\(filtered.count) returned=\(returned.count) cancellation_errors=\(cancellationErrors.count) other_errors=\(otherErrors.count) task_cancelled_at_failure=\(taskCancelledAtFailure.count) task_cancelled_at_return=\(taskCancelledAtReturn.count) provider_exit=\(providerExit.snapshot)")
             #expect(timedOut == 1)
             #expect(cancelled.count == 1 && !partial.isEmpty && partial.count < 32 * 80_000)
             let body = String(decoding:partial,as:UTF8.self)
