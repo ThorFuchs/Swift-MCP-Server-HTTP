@@ -1,0 +1,29 @@
+name: HTTP release link probe
+on:
+  push:
+    branches: [diagnostic/http-link-ownership-2026-11-22]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: http-release-link-probe-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  combined-link:
+    if: vars.HAS_MACOS27_RUNNER == 'true'
+    runs-on: [self-hosted, macOS, macos-27]
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Link fresh PR20 plus PR21 and reduce matching failures
+        env:
+          SWIFT_BUILD_JOBS: '2'
+        run: bash Scripts/probe-http-release-link.sh "$RUNNER_TEMP/http-release-link-${{ github.run_id }}-${{ github.run_attempt }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: http-release-link-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/http-release-link-${{ github.run_id }}-${{ github.run_attempt }}/evidence
+          retention-days: 7
