@@ -39,11 +39,8 @@ jobs:
       - macos-27
       - "${{ inputs.machine == 'studio' && 'mcp-studio' || 'mcp-macbook' }}"
     timeout-minutes: 180
-    env:
-      # Existing job-scoped read-only access to Core, not a repository-wide credential.
-      GIT_CONFIG_COUNT: "1"
-      GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.SWIFT_MCP_SERVER_READ_TOKEN }}@github.com/ThorFuchs/Swift-MCP-Server.git.insteadOf
-      GIT_CONFIG_VALUE_0: https://github.com/ThorFuchs/Swift-MCP-Server.git
+    # Core and HTTP are public; parity uses anonymous read-only Git access.
+    # Do not depend on historical private-repository tokens.
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
