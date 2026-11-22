@@ -63,6 +63,7 @@ PY
     if [[ $archive_exit -ne 0 ]]; then
         echo "Archive failed ($archive_exit); partial files remain in $out" >&2
         [[ $exit_code -ne 0 ]] || exit_code=1
+        printf 'finished_utc=%s\nexit_code=%s\nfailed_steps=%s\nblocked_steps=%s\narchive_exit_code=%s\n' "$(date -u +%FT%TZ)" "$exit_code" "$failed" "$blocked" "$archive_exit" > "$out/summary.txt"
     fi
     printf '\nResults: %s\nEvidence directory: %s\nArchive: %s\nExit: %s\n' "$results" "$out" "$out.tar.gz" "$exit_code"
     exit "$exit_code"
