@@ -76,7 +76,7 @@ public actor HTTPTransport {
         let listener = NIOHTTPServer(configuration:nio)
         let handler = MCPHTTPRequestHandler(server:server,configuration:configuration,owners:requests)
         try await withThrowingTaskGroup(of:Completion.self) { group in
-            group.addTask { [configuration] in try await listener.serve(connectionHandler:MCPHTTPConnectionHandler(handler:handler,limit:configuration.connections)); return .listener }
+            group.addTask { [configuration] in try await listener.serve(connectionHandler:MCPHTTPConnectionHandler(handler:handler)); return .listener }
             group.addTask { [requests] in
                 let addresses = try await listener.listeningAddresses
                 guard addresses.count == 1, let bound = addresses.first else { throw CoreFailure.invalidPolicy }
@@ -105,9 +105,11 @@ private actor HTTPRequestOwners {
     private var writeTimeouts:UInt64 = 0
     var activity:HTTPTransport.Activity { .init(connections:channels.count,requests:active.count,writeTimeouts:writeTimeouts) }
     func writerTimedOut() { if writeTimeouts < UInt64.max { writeTimeouts += 1 } }
-    func connect(limit:Int) throws -> UUID {
-        try Task.checkCancellation()
-        guard !stopped,channels.count < limit else { throw CoreFailure.limit }
+    // NIOHTTPServerConfiguration.maxConnections rejects excess connections before
+    // this hook runs. Keep registration non-throwing: this connection's ~Copyable
+    // storage must be consumed by swift-http-server, including on cancellation.
+    // Request admission still checks 'stopped' in insert(_:) below.
+    func connect() -> UUID {
         let token = UUID(); channels.insert(token); return token
     }
     func disconnect(_ token:UUID) { channels.remove(token) }
@@ -134,18 +136,15 @@ private actor HTTPRequestOwners {
 }
 
 private struct MCPHTTPConnectionHandler:NIOHTTPServerConnectionHandler {
-    let handler:MCPHTTPRequestHandler, limit:Int
+    let handler:MCPHTTPRequestHandler
     func handleConnection(connection:consuming sending NIOHTTPServer.Connection,context:NIOHTTPServer.ConnectionContext) async throws {
-        // The listener is configured for HTTP/1.1 only. Validate the negotiated
-        // connection context before registration, rather than leaving the context
-        // unused and allowing release-mode dead-argument specialization.
-        guard context.httpVersion == .http1_1 || context.httpVersion == .plaintextHTTP1_1 else {
-            throw CoreFailure.invalidPolicy
-        }
-        let token = try await handler.owners.connect(limit:limit)
-        // Keep the noncopyable Connection's internal HTTPProtocol destruction inside
-        // swift-http-server. Calling handleRequests directly here caused Swift 6.4
-        // optimized consumers to reference a non-exported HTTPProtocol metadata accessor.
+        // HTTP versions and connection limits are configured and enforced by the
+        // listener (HTTP/1.1 only, maxConnections). No throwing operations are
+        // permitted before the consuming transfer of 'connection': otherwise an
+        // optimized cross-module cleanup can reference the non-public nested
+        // HTTPProtocol metadata accessor in swift-http-server.
+        let token = await handler.owners.connect()
+        // Keep the noncopyable Connection's internal destruction in swift-http-server.
         do {
             try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
                 .handleConnection(connection:connection,context:context)
