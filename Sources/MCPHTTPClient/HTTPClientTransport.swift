@@ -91,7 +91,7 @@ public struct HTTPClientTransport: ClientTransport {
         if type.hasPrefix("application/json") {
             // JSON-RPC errors arrive with 4xx statuses (for example HeaderMismatch); deliver them.
             let body = try await response.body.collect(upTo: maximumMessageBytes)
-            try await receive(Data(buffer: body))
+            try await receive(Data(body.readableBytesView))
             return
         }
         guard (200..<300).contains(Int(response.status.code)) else { throw HTTPClientTransportError.status(Int(response.status.code)) }

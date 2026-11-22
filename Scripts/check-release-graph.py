@@ -40,7 +40,15 @@ def main():
         raise ValueError("swift-http-server revision unexpectedly changed")
     if root["swift-mcp-server"].get("branch") != "main":
         raise ValueError("Core dependency contract changed; conduct HTTP #14 audit")
-    if root["swift-json"].get("version", "") < "1.9.0":
+    json_version = root["swift-json"].get("version", "")
+    try:
+        parts = json_version.split(".")
+        if len(parts) < 2 or any(not part.isdecimal() for part in parts):
+            raise ValueError("invalid version")
+        parsed_version = tuple(int(part) for part in parts)
+    except (AttributeError, ValueError) as exc:
+        raise ValueError(f"Swift-JSON has an invalid semantic version: {json_version!r}") from exc
+    if parsed_version < (1, 9, 0):
         raise ValueError("Swift-JSON must meet Core's 1.9.0 minimum")
     print("Release graph consistency passed; Core branch:main remains a 1.0 blocker.")
 

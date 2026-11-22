@@ -17,8 +17,58 @@ Baseline: [HTTP main `80792825`](https://github.com/ThorFuchs/Swift-MCP-Server-H
 At baseline, [post-merge CI 44937813368](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/44937813368)
 passed macOS 27 debug tests and the server/client 2026-07-28 referee.
 The earlier **optimized** server fixture was reported to have a
-`NIOHTTPServer.Connection.HTTPProtocol` metadata/link error. That report
-is a **hypothesis** pending fresh reproduction.
+`NIOHTTPServer.Connection.HTTPProtocol` metadata/link error. This is now
+**reproduced**, not just a hypothesis, on the original #13 PR SHA
+`aa38b646bc977a7dc746c5a0cdccac8e6349423f` (see evidence below).
+
+## Post-merge Linux fixture follow-up
+
+The [#18 hotfix CI 44943304206](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/44943304206)
+on `a2f02d2263baeff176044418f55dbc4754573f1e` proceeded past
+the previous HTTP client `Data(buffer:)` compiler error and compiled
+the root HTTP package. It next failed compiling the **separate referee
+fixture** at
+`Tools/Conformance/SwiftFixture/Sources/ConformanceFixture/FixtureRuntime.swift:3`:
+`no such module 'CryptoKit'` on Linux (job `136965020798`).
+
+The fixture now imports `CryptoKit` on supported Apple toolchains or
+`Crypto` otherwise, and directly declares swift-crypto in its own
+package manifest with the `Crypto` target product enabled only for Linux.
+It does **not** claim any new platform support, change the HTTP transport
+or alter Core's dependency graph. The following CI run must establish
+whether both optimized fixtures can now be compiled.
+
+## First #13 qualification results: reproducible failures
+
+[PR #17 CI 44940347042](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/44940347042)
+tested commit `aa38b646bc977a7dc746c5a0cdccac8e6349423f`:
+
+- **macOS 27 debug:** successful root tests and both existing server/client
+  referees, including the existing declared limitations.
+- **macOS 27 optimized:** root HTTP library `swift build -c release`
+  **passed**. The next step, the optimized **server** fixture link,
+  **failed** with undefined arm64 symbol:
+  `type metadata accessor for NIOHTTPServer.NIOHTTPServer.Connection.HTTPProtocol`,
+  referenced by `MCPHTTPConnectionHandler.handleConnection`. Therefore
+  the optimized client fixture build, optimized XCTest suites and both
+  release-mode referee executions **did not run**. Source provenance of the
+  linker issue remains unproven: do not assign it to an upstream package
+  without isolating whether compiler optimization, our use of the type or
+  the pinned `swift-http-server` revision is responsible.
+- **Linux Swift 6.4.2:** root/fixture dependency resolution and
+  `check-release-graph.py` passed, but root optimized compilation failed
+  at `HTTPClientTransport.swift:94` because `Data(buffer: body)` was
+  not available on Linux. Later fixture/link checks **did not run**.
+- **Evidence hygiene:** `git rev-parse HEAD` in the Linux-container
+  script also emitted `fatal: detected dubious ownership`, but did not
+  stop the script because it appeared inside an `echo` substitution.
+  The result must be an explicit, failure-checked Git query scoped to
+  the current checkout, not a global `safe.directory` override.
+
+Follow-up fixes are tracked in the post-merge hotfix PR. Re-run all
+gates on its exact SHA before re-evaluating the supported-platform
+contract. **No 1.0 release claim is authorized while the optimized
+macOS fixture fails to link.**
 
 ## Qualified build procedure
 

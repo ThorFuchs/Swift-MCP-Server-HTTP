@@ -136,8 +136,23 @@ private actor HTTPRequestOwners {
 private struct MCPHTTPConnectionHandler:NIOHTTPServerConnectionHandler {
     let handler:MCPHTTPRequestHandler, limit:Int
     func handleConnection(connection:consuming sending NIOHTTPServer.Connection,context:NIOHTTPServer.ConnectionContext) async throws {
+        // The listener is configured for HTTP/1.1 only. Validate the negotiated
+        // connection context before registration, rather than leaving the context
+        // unused and allowing release-mode dead-argument specialization.
+        guard context.httpVersion == .http1_1 || context.httpVersion == .plaintextHTTP1_1 else {
+            throw CoreFailure.invalidPolicy
+        }
         let token = try await handler.owners.connect(limit:limit)
-        await connection.handleRequests(handler:handler)
+        // Keep the noncopyable Connection's internal HTTPProtocol destruction inside
+        // swift-http-server. Calling handleRequests directly here caused Swift 6.4
+        // optimized consumers to reference a non-exported HTTPProtocol metadata accessor.
+        do {
+            try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
+                .handleConnection(connection:connection,context:context)
+        } catch {
+            await handler.owners.disconnect(token)
+            throw error
+        }
         await handler.owners.disconnect(token)
     }
 }
