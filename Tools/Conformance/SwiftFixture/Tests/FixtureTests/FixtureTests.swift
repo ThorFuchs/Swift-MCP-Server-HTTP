@@ -152,12 +152,17 @@ private func text(_ response: JSON) -> String? { response.objectValue?["result"]
             guard ContinuousClock.now < shutdown else { throw FixtureFailure.ownership };try await Task.sleep(for: .milliseconds(5))
         }
         #expect(process.terminationStatus == 0)
-        #expect(try String(contentsOf: log, encoding: .utf8).contains("FIXTURE_STOPPED joined=1 active=0"))
+        #expect(try String(contentsOf: log, encoding: .utf8).contains("FIXTURE_STOPPED started=2 joined=2 active=0"))
         if let stream, let streamBody {
             #expect(stream.terminationStatus == 0)
             let bytes = try String(contentsOf: streamBody, encoding: .utf8)
-            #expect(bytes.contains(#""resultType":"complete""#))
-            #expect(!bytes.contains("notifications/cancelled"))
+            // Server-initiated subscription teardown sends cancellation, then
+            // the graceful complete result on this still-writable SSE stream.
+            let cancelled = try #require(bytes.range(of: "notifications/cancelled"))
+            let complete = try #require(bytes.range(of: #""resultType":"complete""#))
+            #expect(cancelled.lowerBound < complete.lowerBound)
+            #expect(bytes.components(separatedBy: "notifications/cancelled").count == 2)
+            #expect(bytes.components(separatedBy: #""resultType":"complete""#).count == 2)
         }
     }
     @concurrent private func curl(_ url: String, host: String?, directory: URL, method: String = "tools/call", id: Int = 1) async throws -> (status: Int, body: String) {
