@@ -1,0 +1,63 @@
+name: macOS host parity (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      machine:
+        description: Physical self-hosted Mac (requires unique runner label)
+        required: true
+        type: choice
+        options:
+          - macbook
+          - studio
+      snapshot:
+        description: Immutable HTTP source snapshot
+        required: true
+        type: choice
+        options:
+          - pr20
+          - pr21
+          - baseline
+      scope:
+        description: Focused parity or full conformance qualification
+        required: true
+        default: focused
+        type: choice
+        options:
+          - focused
+          - full
+permissions:
+  contents: read
+# Serialize parity runs inside the HTTP repository; Core runs separately.
+concurrency:
+  group: mcp-http-host-parity
+  cancel-in-progress: false
+jobs:
+  parity:
+    runs-on:
+      - self-hosted
+      - macOS
+      - macos-27
+      - "${{ inputs.machine == 'studio' && 'mcp-studio' || 'mcp-macbook' }}"
+    timeout-minutes: 180
+    env:
+      # Existing job-scoped read-only access to Core, not a repository-wide credential.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.SWIFT_MCP_SERVER_READ_TOKEN }}@github.com/ThorFuchs/Swift-MCP-Server.git.insteadOf
+      GIT_CONFIG_VALUE_0: https://github.com/ThorFuchs/Swift-MCP-Server.git
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Fresh checkout and host parity run
+        run: bash Scripts/ci-parity-run.sh "${{ inputs.snapshot }}" "${{ inputs.machine }}" "${{ inputs.scope }}" "$RUNNER_TEMP/MCP-CI-Parity"
+      - name: Upload parity metadata (no raw conformance bodies)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: host-parity-${{ inputs.machine }}-${{ inputs.snapshot }}-${{ inputs.scope }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/MCP-CI-Parity/**/host.txt
+            ${{ runner.temp }}/MCP-CI-Parity/**/source.txt
+            ${{ runner.temp }}/MCP-CI-Parity/**/dependencies.txt
+            ${{ runner.temp }}/MCP-CI-Parity/**/results.tsv
