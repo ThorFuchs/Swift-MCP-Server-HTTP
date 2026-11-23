@@ -1,0 +1,52 @@
+name: Apple SwiftNIO early-EOF consumer proof (diagnostic)
+on:
+  push:
+    branches: [diagnostic/swiftnio-upstream-eof-2026-11-23]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Focused three-case proof or full diagnostic qualification"
+        required: true
+        default: focused
+        type: choice
+        options: [focused, full]
+permissions:
+  contents: read
+concurrency:
+  group: nio-upstream-eof-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  macos-27-upstream:
+    if: vars.HAS_MACOS27_RUNNER == 'true'
+    runs-on: [self-hosted, macOS, macos-27]
+    timeout-minutes: 90
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.SWIFT_MCP_SERVER_READ_TOKEN }}@github.com/ThorFuchs/Swift-MCP-Server.git.insteadOf
+      GIT_CONFIG_VALUE_0: https://github.com/ThorFuchs/Swift-MCP-Server.git
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Pin referee Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: Tools/Conformance/.nvmrc
+      - name: Validate Node and Swift toolchains
+        run: |
+          node --version
+          test "$(node -p 'process.versions.node.split(".")[0]')" = "$(cat Tools/Conformance/.nvmrc)"
+          swift --version
+      - name: Run strict unmasked EOF proof against Apple merge
+        env:
+          MCP_NIO_PROOF_OUT_DIR: ${{ runner.temp }}/nio-upstream-eof-proof
+          MCP_NIO_PROOF_MODE: ${{ inputs.mode || 'focused' }}
+          SWIFT_BUILD_JOBS: "2"
+        run: bash Scripts/qualify-swiftnio-upstream-eof.sh
+      - name: Retain complete evidence even after a failed assertion
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nio-upstream-eof-proof
+          path: ${{ runner.temp }}/nio-upstream-eof-proof
+          if-no-files-found: warn
