@@ -536,14 +536,53 @@ private func insufficient(_ scope: String, sent: String) -> HTTPAuthorizationCha
         #expect(try await client.handleChallenge(challenge(sent: "Bearer token-1")))
         #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-2"])
 
-        // No refresh at the old server, and nothing of the old client at the new one.
+        // No old refresh token/client identity must cross the issuer boundary.
+        // Check credential fields, not opaque body substrings: a random
+        // 43-character Base64URL PKCE verifier can legitimately contain "r1".
         #expect(log.requests(to: "/token").map(\.url) == ["\(issuer)/token", "\(issuer2)/token"])
         #expect(log.requests(to: "/register").map(\.url) == ["\(issuer)/register", "\(issuer2)/register"])
         let second = log.all.filter { $0.url.hasPrefix(issuer2) }
-        #expect(!second.contains { $0.body.contains("registered-client") || $0.body.contains("r1") })
+        #expect(second.map(\.url) == [
+            "\(issuer2)/.well-known/oauth-authorization-server",
+            "\(issuer2)/register",
+            "\(issuer2)/token",
+        ])
+        // This test uses dynamically registered, secretless clients. A stale
+        // Basic/Bearer header must never travel to the newly discovered issuer.
+        #expect(second.allSatisfy { $0.headers["authorization"] == nil })
+
+        let registration = try #require(second.first { $0.url == "\(issuer2)/register" })
+        let document = try #require(WireCodec.parse(Array(registration.body.utf8), limits: .balanced).result.objectValue)
+        #expect(document["client_name"]?.stringValue == "tests")
+        #expect(document["client_id"] == nil && document["client_secret"] == nil && document["refresh_token"] == nil)
+
+        let exchange = try #require(second.first { $0.url == "\(issuer2)/token" })
+        let fields = form(exchange.body)
+        #expect(Set(fields.keys) == Set([
+            "grant_type", "code", "redirect_uri", "code_verifier", "resource", "client_id",
+        ]))
+        #expect(fields["grant_type"] == "authorization_code" && fields["client_id"] == "second-client")
+        #expect(fields["code"] == "code-1" && fields["redirect_uri"] == redirect.absoluteString)
+        #expect(fields["resource"] == endpoint.absoluteString && fields["code_verifier"]?.count == 43)
         #expect(query(try #require(log.authorizationRequests.last))["client_id"] == "second-client")
         let saved = try #require(await store.load(endpoint: endpoint))
         #expect(saved.issuer == issuer2 && saved.clientID == "second-client" && saved.accessToken == "token-2" && saved.refreshToken == "r2")
+    }
+
+    @Test func opaquePKCEVerifierSubstringIsNotAnOldRefreshToken() {
+        // Deterministic counterexample to the former body.contains("r1") test.
+        // A 43-character opaque PKCE verifier may contain that substring without
+        // carrying the old refresh-token credential as a protocol field.
+        let verifier = String(repeating: "A", count: 20) + "r1" + String(repeating: "B", count: 21)
+        let body = FormEncoding.encode([
+            ("grant_type", "authorization_code"), ("code", "code-1"),
+            ("redirect_uri", redirect.absoluteString), ("code_verifier", verifier),
+            ("resource", endpoint.absoluteString), ("client_id", "second-client"),
+        ])
+        let fields = form(body)
+        #expect(body.contains("r1") && verifier.count == 43)
+        #expect(fields["code_verifier"] == verifier && fields["refresh_token"] == nil)
+        #expect(fields["client_id"] == "second-client" && fields["grant_type"] == "authorization_code")
     }
 
     @Test func storedAuthorizationSurvivesARestart() async throws {
