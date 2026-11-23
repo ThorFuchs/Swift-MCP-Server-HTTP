@@ -1,5 +1,7 @@
 # HTTP 1.0 qualification: optimized builds and platform contract (#13)
 
+> **Current evidence / release decision (2026-11-23):** The baseline below preserves its historical 2026-11-21 findings. The updated exact-commit Mac Studio FULL results, 116/116 Debug and Release SDK tests, both optimized fixture links, both server/client referees, and the explicit **NO-GO 1.0.0 release gates** are documented in [the dated RC readiness ledger](Release/HTTP_RC_READINESS_2026-11-23.md). See [OAuth isolation PR #24](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/pull/24), [early EOF #12](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/12), [write deadlines #25](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/25), [dependency/linker #13](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/13), and [immutable Core #14](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/14). The old unchecked baseline checkboxes below should **not** be interpreted as today's evidence status.\n\n
+
 **Prepared:** 2026-11-21. **Status:** release qualification in progress,
 not a declaration that the new optimized jobs have passed.
 Record exact PR commit and CI evidence only after it is available.
