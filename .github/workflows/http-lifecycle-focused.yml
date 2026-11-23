@@ -1,0 +1,27 @@
+name: HTTP lifecycle focused
+on:
+  push:
+    branches: [fix/stalled-writer-lifecycle-tests]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: http-lifecycle-focused-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lifecycle:
+    if: vars.HAS_MACOS27_RUNNER == 'true'
+    runs-on: [self-hosted, macOS, macos-27]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify four lifecycle cases in Debug and Release
+        run: bash Scripts/verify-http-lifecycle.sh ci focused "${{ github.sha }}" "$RUNNER_TEMP/http-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: http-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/http-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7

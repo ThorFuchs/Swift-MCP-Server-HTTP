@@ -198,6 +198,97 @@ private func waitHTTP(_ condition:@escaping @Sendable () async -> Bool,milliseco
     }
 }
 
+private enum StalledHTTPProviderLifetime: String, Sendable, Equatable {
+    case finite, untilCancellation
+}
+
+private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) async throws {
+    let entered = HTTPCallCounter(),returned = HTTPCallCounter(),cancelled = HTTPCallCounter()
+    let disconnected = HTTPCallCounter(),unexpected = HTTPCallCounter()
+    let attempted = HTTPCallCounter(),admitted = HTTPCallCounter(),filtered = HTTPCallCounter()
+    let release = AsyncStream<Void>.makeStream(bufferingPolicy:.bufferingNewest(1))
+    defer { release.continuation.finish() }
+    let tool = ToolRegistration(definition:try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,context in
+        entered.increment()
+        do {
+            do {
+                // Finite events exercise socket backpressure without a terminal
+                // result large enough to test the independent terminal-work cap.
+                for _ in 1...32 {
+                    attempted.increment()
+                    if try await context.log(.debug,data:.string(String(repeating:"x",count:80_000))) { admitted.increment() }
+                    else { filtered.increment() }
+                    try await Task.sleep(for:.milliseconds(2))
+                }
+            } catch {
+                if lifetime == .finite { throw error }
+                // Logging is optional for this deliberately still-live provider.
+                // A failed event sink must also cancel its separate pending work.
+                // Overflow, budget failures and request deadlines remain failures.
+                if !(error is CancellationError) && error as? CoreFailure != .disconnected && error as? CoreFailure != .eventsUnavailable {
+                    unexpected.increment()
+                    print("STALLED_LIVE_EMISSION_FAILURE \(error)")
+                }
+            }
+            if lifetime == .untilCancellation {
+                var iterator = release.stream.makeAsyncIterator()
+                _ = await iterator.next() // Never released by the successful test path.
+                try Task.checkCancellation()
+                throw CoreFailure.invalidState
+            }
+            let result = try parseHTTP(#"{"resultType":"complete","content":[]}"#)
+            returned.increment()
+            return result
+        } catch is CancellationError {
+            cancelled.increment()
+            throw CancellationError()
+        } catch {
+            if error as? CoreFailure == .disconnected || error as? CoreFailure == .eventsUnavailable { disconnected.increment() }
+            else { unexpected.increment() }
+            throw error
+        }
+    }
+    let core = try await httpCore(tools:[tool],events:EventPolicy(queuedBytes:2_097_152,principalBytes:4_194_304,logIntervalMilliseconds:1,logRedactor:{$0}))
+    try await withHTTP(core,mode:.sse,io:1000,connections:1) { address,transport in
+        let socket = try HTTPTestSocket(address,receiveWindow:1024); defer { socket.closeSocket() }
+        socket.constrainReceiveWindow()
+        let request = String(decoding:rpcHTTP(method:"tools/call",params:#""name":"wait","arguments":{},"#),as:UTF8.self)
+            .replacingOccurrences(of:"\"io.modelcontextprotocol/clientCapabilities\":{}",with:"\"io.modelcontextprotocol/logLevel\":\"debug\",\"io.modelcontextprotocol/clientCapabilities\":{}")
+        try socket.request(Data(request.utf8),method:"tools/call")
+        try await waitHTTP { entered.count == 1 }
+        // Prove timeout cleanup before shutdown or reading from the stalled peer
+        // can release pressure. In particular, no retained event or socket owner.
+        try await waitHTTP({
+            let coreState = await core.activity,transportState = await transport.activity
+            return coreState.active == 0 && coreState.queued == 0 && coreState.requests == 0 && coreState.leases == 0 &&
+                coreState.bufferedBytes == 0 && coreState.eventBytes == 0 && coreState.subscriptions == 0 &&
+                coreState.inspections == 0 && coreState.queuedInspections == 0 &&
+                transportState.requests == 0 && transportState.connections == 0
+        },milliseconds:10_000)
+        let partial = try await socket.receive()
+        let timedOut = await transport.activity.writeTimeouts
+        print("STALLED_WRITER lifetime=\(lifetime.rawValue) timeout=\(timedOut) returned=\(returned.count) cancelled=\(cancelled.count) disconnected=\(disconnected.count) unexpected=\(unexpected.count) attempted=\(attempted.count) admitted=\(admitted.count) filtered=\(filtered.count) received=\(partial.count)")
+        #expect(timedOut == 1)
+        #expect(entered.count == 1 && unexpected.count == 0 && admitted.count > 0)
+        if lifetime == .untilCancellation {
+            #expect(cancelled.count == 1 && returned.count == 0 && disconnected.count == 0)
+        } else {
+            // Queue admission does not acknowledge delivery. A finite provider
+            // may already have returned when its still-owned writer times out.
+            #expect(returned.count + cancelled.count + disconnected.count == 1)
+            if returned.count == 1 { #expect(attempted.count == 32 && admitted.count == 32) }
+        }
+        #expect(!partial.isEmpty && partial.count < 32 * 80_000)
+        let body = String(decoding:partial,as:UTF8.self)
+        #expect(body.components(separatedBy:"HTTP/1.1").count == 2 && !body.contains("\"resultType\":\"complete\""))
+        // With one allowed connection, success proves admission recovers while
+        // this same listener remains running. Shutdown has not been called.
+        let recovered = try await curlHTTP(address,data:rpcHTTP())
+        #expect(recovered.exit == 0 && recovered.status == 200)
+        #expect(await transport.activity.writeTimeouts == 1)
+    }
+}
+
 // Real listeners share process-global NIO resources; serialize independent cases.
 // Each case still orchestrates its own concurrent requests/cancellation/shutdown.
 @Suite(.serialized) struct NativeHTTPListenerTests {
@@ -532,36 +623,11 @@ private func waitHTTP(_ condition:@escaping @Sendable () async -> Bool,milliseco
     }
 
     @Test func nativeHTTPStalledWriterClosesAndReleasesTerminalOwnership() async throws {
-        let entered = HTTPCallCounter(),cancelled = HTTPCallCounter()
-        let tool = ToolRegistration(definition:try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,context in
-            entered.increment()
-            do {
-                // Multiple finite frames exceed the real socket send window. One
-                // large terminal result would instead test the terminal work cap.
-                for _ in 1...32 {
-                    try await context.log(.debug,data:.string(String(repeating:"x",count:80_000)))
-                    try await Task.sleep(for:.milliseconds(2))
-                }
-            } catch { print("STALLED_PROVIDER_FAILURE \(error)"); cancelled.increment(); throw error }
-            return try parseHTTP(#"{"resultType":"complete","content":[]}"#)
-        }
-        let core = try await httpCore(tools:[tool],events:EventPolicy(queuedBytes:2_097_152,principalBytes:4_194_304,logIntervalMilliseconds:1,logRedactor:{$0}))
-        try await withHTTP(core,mode:.sse,io:1000) { address,transport in
-            let socket = try HTTPTestSocket(address,receiveWindow:1024); defer { socket.closeSocket() }
-            socket.constrainReceiveWindow()
-            let request = String(decoding:rpcHTTP(method:"tools/call",params:#""name":"wait","arguments":{},"#),as:UTF8.self)
-                .replacingOccurrences(of:"\"io.modelcontextprotocol/clientCapabilities\":{}",with:"\"io.modelcontextprotocol/logLevel\":\"debug\",\"io.modelcontextprotocol/clientCapabilities\":{}")
-            try socket.request(Data(request.utf8),method:"tools/call")
-            try await waitHTTP { entered.count == 1 }
-            try await waitHTTP({ let activity = await core.activity; return activity.active == 0 && activity.requests == 0 },milliseconds:10_000)
-            let partial = try await socket.receive()
-            let timedOut = await transport.activity.writeTimeouts
-            print("STALLED_WRITER timeout=\(timedOut) cancelled=\(cancelled.count) received=\(partial.count)")
-            #expect(timedOut == 1)
-            #expect(cancelled.count == 1 && !partial.isEmpty && partial.count < 32 * 80_000)
-            let body = String(decoding:partial,as:UTF8.self)
-            #expect(body.components(separatedBy:"HTTP/1.1").count == 2 && !body.contains("\"resultType\":\"complete\""))
-        }
+        try await exerciseStalledHTTPWriter(.finite)
+    }
+
+    @Test func nativeHTTPStalledWriterCancelsLiveProviderAndRecovers() async throws {
+        try await exerciseStalledHTTPWriter(.untilCancellation)
     }
 
     @Test func nativeHTTPConnectionCeilingRejectsOvershootAndRecovers() async throws {

@@ -105,9 +105,12 @@ private actor HTTPRequestOwners {
     private var writeTimeouts:UInt64 = 0
     var activity:HTTPTransport.Activity { .init(connections:channels.count,requests:active.count,writeTimeouts:writeTimeouts) }
     func writerTimedOut() { if writeTimeouts < UInt64.max { writeTimeouts += 1 } }
-    func connect(limit:Int) throws -> UUID {
-        try Task.checkCancellation()
-        guard !stopped,channels.count < limit else { throw CoreFailure.limit }
+    // Admission is a nonthrowing reservation. The caller must consume the
+    // noncopyable NIOHTTPServer.Connection even when admission is refused.
+    // NIO's maxConnections backs up accept(), but does not immediately reject
+    // already accepted sockets: preserve the strict public connection ceiling.
+    func connect(limit:Int) -> UUID? {
+        guard !Task.isCancelled, !stopped, channels.count < limit else { return nil }
         let token = UUID(); channels.insert(token); return token
     }
     func disconnect(_ token:UUID) { channels.remove(token) }
@@ -136,16 +139,21 @@ private actor HTTPRequestOwners {
 private struct MCPHTTPConnectionHandler:NIOHTTPServerConnectionHandler {
     let handler:MCPHTTPRequestHandler, limit:Int
     func handleConnection(connection:consuming sending NIOHTTPServer.Connection,context:NIOHTTPServer.ConnectionContext) async throws {
-        // The listener is configured for HTTP/1.1 only. Validate the negotiated
-        // connection context before registration, rather than leaving the context
-        // unused and allowing release-mode dead-argument specialization.
-        guard context.httpVersion == .http1_1 || context.httpVersion == .plaintextHTTP1_1 else {
-            throw CoreFailure.invalidPolicy
+        // Both paths must transfer the ~Copyable connection to swift-http-server
+        // without throwing or dropping it in MCPHTTP. The upstream listener's
+        // maxConnections is backpressure, not rejection of accepted sockets.
+        guard let token = await handler.owners.connect(limit:limit) else {
+            // This callback already runs as an upstream per-connection child
+            // task. Cancelling only *this* task avoids escaping the ~Copyable
+            // connection into a Task closure, which Swift 6.4 forbids.
+            // The upstream request loop observes cancellation before reading
+            // a request; its dispatcher retains ownership of channel teardown.
+            withUnsafeCurrentTask { $0?.cancel() }
+            try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
+                .handleConnection(connection:connection,context:context)
+            return
         }
-        let token = try await handler.owners.connect(limit:limit)
-        // Keep the noncopyable Connection's internal HTTPProtocol destruction inside
-        // swift-http-server. Calling handleRequests directly here caused Swift 6.4
-        // optimized consumers to reference a non-exported HTTPProtocol metadata accessor.
+        // Keep the noncopyable Connection's internal destruction in swift-http-server.
         do {
             try await NIOHTTPServerDefaultConnectionHandler(handler:handler)
                 .handleConnection(connection:connection,context:context)
