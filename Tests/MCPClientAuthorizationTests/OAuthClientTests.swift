@@ -537,8 +537,8 @@ private func insufficient(_ scope: String, sent: String) -> HTTPAuthorizationCha
         #expect(try await client.authorizationHeaders(for: endpoint).map(\.value) == ["Bearer token-2"])
 
         // No old refresh token/client identity must cross the issuer boundary.
-        // Check *credential fields*, not opaque body substrings: a random 43-byte-
-        // encoded PKCE verifier can legitimately contain the characters "r1".
+        // Check credential fields, not opaque body substrings: a random
+        // 43-character Base64URL PKCE verifier can legitimately contain "r1".
         #expect(log.requests(to: "/token").map(\.url) == ["\(issuer)/token", "\(issuer2)/token"])
         #expect(log.requests(to: "/register").map(\.url) == ["\(issuer)/register", "\(issuer2)/register"])
         let second = log.all.filter { $0.url.hasPrefix(issuer2) }
