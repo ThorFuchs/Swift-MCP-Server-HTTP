@@ -43,11 +43,18 @@ The 116 SDK tests per mode break down as **56 HTTP, 7 HTTP Client, 20 HTTP Autho
 
 **Causality limit:** The original failed request body was not recorded. We can demonstrate the false-positive path and successful strict tests; we cannot prove that the precise historical failure was caused by that field, nor claim all possible credential-leak scenarios are thereby disproven.
 
+### PR CI infrastructure finding (after creating OAuth PR #24)
+
+[PR #24 CI run 45153913196](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/45153913196) on the MacBook self-hosted runner **passed the 116 Debug SDK tests** (including both corrected OAuth tests), then failed at `npm ci` **before the Debug server/client referees**. Its Homebrew Node **26.5.0** could not load `/opt/homebrew/opt/simdjson/lib/libsimdjson.33.dylib`; the step exited **134**. This is a concrete **runner dependency failure**, not an observed OAuth or HTTP-test failure. Nevertheless, **the required PR CI is RED**; it cannot be waived by the independent Studio FULL PASS.
+
+[Separate CI fix PR #26](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/pull/26) changes **only the workflow**: both macOS jobs use a full-SHA pinned `actions/setup-node` v4.4.0 and the committed `Tools/Conformance/.nvmrc` (Node major 24), then verify the version. The isolated CI change must pass its own matrix before the OAuth PR can be retested against the updated base. Do not merge either change while its required checks remain unresolved. This is an evidence snapshot; check GitHub for subsequent job states.
+
 ## 2. 1.0 release gates — decision matrix
 
 | ID | Gate and acceptance | Current status | Tracking |
 | --- | --- | --- | --- |
-| INT-01 | Merge isolated OAuth test fix only after review + exact PR CI; independently verify resulting main tree and postmerge CI | **OPEN**: PR #24 submitted, separate Studio FULL PASS | [PR #24](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/pull/24) |
+| CI-00 | Reproducible Node 24 for all macOS referee jobs; clean Debug/Release PR CI including both server/client referees | **BLOCKED**: MacBook PR CI failed at broken Homebrew Node 26 dylib, not at an SDK assertion; repair PR #26 pending | [PR #26](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/pull/26) |
+| INT-01 | Merge isolated OAuth test fix only after review + exact PR CI; independently verify resulting main tree and postmerge CI | **OPEN**: PR #24 submitted, separate Studio FULL PASS; PR CI must be rerun after CI-00 | [PR #24](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/pull/24) |
 | NET-01 | Darwin peer FIN/RST/EOF cancellation correctness, including TLS, **without** `withKnownIssue` | **NO-GO**: 3 known issues remain; upstream early-EOF PR open at snapshot | [#12](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/12), [swift-nio #3783](https://github.com/apple/swift-nio/pull/3783) |
 | WRITE-01 | Explicit native bounded **response-head and static-response writes**, cancellation+join and ownership recovery in Debug/Release | **NO-GO**: source-level gap documented, not yet behaviorally qualified | [#25](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/25) |
 | DEP-01 | Choose and qualify official stable swift-http-server dependency under optimized ARM64 server consumer + fixture/referees | **NO-GO for 0.5.0**: PR #21 fails Swift Build aggregated Reader metadata symbols; alternate native-backend link experiment is not a shipping fix | [#13](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/13), [PR #21](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/pull/21) |
