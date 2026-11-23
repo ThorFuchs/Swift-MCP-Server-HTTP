@@ -1,16 +1,46 @@
 # MCPHTTP test plan
 
-Real HTTP/TLS and SSE, standard/custom header mirroring/sentinel/scalar cases, raw bounded reader, invalid methods/media/Accept, GET/DELETE 405, no session/replay, Host/Origin/proxy checks, slow clients/accepted channel cancellation.
+Use Swift Testing against the production package. Native listener tests cover
+HTTP/TLS, SSE, header mapping, bounded reads, method/media negotiation, authority
+and authorization, schema validation, connection admission, cancellation and
+shutdown. They share process-global NIO resources and run in a serialized suite;
+each case still orchestrates its own concurrent work.
 
-Use real Swift Testing @Test/#expect after implementing behavior. Parameterize adversarial variants; orchestrate races with explicit synchronization rather than timing sleeps. In-process helpers do not substitute for actual I/O where transport ownership is the claim. Record source paths and gate receipts. No passing empty tests or fixture production flags.
-# Current execution evidence
+## Response ownership
 
-The actual listener cases in NativeListenerTests.swift run against production
-source linked into the scoped native harness, with real HTTP/1.1/TLS sockets.
-See [current outcomes](../../Docs/Evidence/HTTP/cases.json). Thirty listener
-functions include real Host/Origin, mirrors, admission/time/body/header limits,
-auth, input/output schema checks, JSON/SSE, stalled writes, cancellation and
-shutdown ownership. One strict Darwin pre-head peer cancellation test fails and
-is retained; the HTTP target/test guard remains. No simulated mode or skipped
-test is counted as a transport pass. The full suite preserves all133stdio tests.
+The [response lifecycle contract](../../Docs/HTTP_RESPONSE_LIFECYCLE.md) separates
+provider completion, event drain, HTTP completion and connection teardown.
+
+| Test | Contract |
+| --- | --- |
+| `normalProviderReturnKeepsRequestOwnedUntilFailedEventDrainJoins` | Hold the public Core event sink with a signal, observe the provider's normal return path and retained ownership, then fail the sink and verify complete cleanup with no second write attempt. This is an in-process boundary test. |
+| `nativeHTTPStalledWriterClosesAndReleasesTerminalOwnership` | A finite provider may finish before the real HTTP writer times out. Distinguish normal return, cancellation and stream failure; require cleanup and listener recovery. |
+| `nativeHTTPStalledWriterCancelsLiveProviderAndRecovers` | Keep a provider alive behind an unfulfilled cancellation-aware signal. A real stalled writer must cancel that provider and join its work. |
+| `nativeHTTPConnectionCeilingRejectsOvershootAndRecovers` | Refused accepted sockets close promptly; strict connection capacity becomes reusable. |
+
+Both stalled-writer cases retain the original frame count, payload size and I/O
+deadline. Verify Core and HTTP resource counts before reading the stalled client
+or shutting down the listener. Require one timeout, a partial response with one
+head and no complete terminal result, and a successful new request on the same
+listener with a one-connection ceiling.
+
+Use explicit synchronization for ordering. Time limits bound test completion;
+they do not establish that a finite provider is still running. Report admitted
+and filtered logging separately. Do not equate every provider error with Swift
+task cancellation. An empty test selection is a failed qualification.
+
+## Separate qualifications
+
+Run focused ownership cases in both Debug and Release before the full SDK and
+fixture/referee gates. Build the server and client executables: successful root
+library compilation does not prove that an optimized downstream executable links.
+
+The existing Darwin early-EOF known-issue cases remain a separate dependency
+qualification. A known issue or an in-process sink test is not evidence of a
+passing native peer-disconnect case. Response-head and static-response write
+deadlines also need dedicated native tests; the current body-stall cases do not
+prove those paths.
+
+Execution results belong in CI and generated local logs, not hand-maintained
+counts or historical receipt paths in this test plan.
 

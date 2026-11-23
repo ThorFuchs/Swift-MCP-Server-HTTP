@@ -33,6 +33,9 @@ if [[ "$mode" == "full" ]]; then
   echo "Run optimized HTTP SDK tests"
   swift test -c release -j "$jobs"
   echo "Run optimized fixture tests"
-  swift test -c release -j "$jobs" --package-path Tools/Conformance/SwiftFixture
+  fixture_binary="$(swift build -c release -j "$jobs" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
+  [[ -x "$fixture_binary" ]] || { echo "Missing optimized fixture executable: $fixture_binary" >&2; exit 1; }
+  echo "Fixture executable: $fixture_binary"
+  MCP_REFEREE_FIXTURE="$fixture_binary" swift test -c release -j "$jobs" --package-path Tools/Conformance/SwiftFixture
 fi
 echo "Release qualification $mode passed at $source_sha"
