@@ -30,6 +30,15 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Select pinned Node for conformance
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: Tools/Conformance/.nvmrc
+      - name: Verify Node toolchain
+        run: |
+          node --version
+          npm --version
+          test "$(node -p 'process.versions.node.split(".")[0]')" = "$(cat Tools/Conformance/.nvmrc)"
       - run: swift --version
       - run: Scripts/test.sh
       - run: Scripts/conformance.sh "$RUNNER_TEMP/conformance"
@@ -57,6 +66,15 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Select pinned Node for conformance
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: Tools/Conformance/.nvmrc
+      - name: Verify Node toolchain
+        run: |
+          node --version
+          npm --version
+          test "$(node -p 'process.versions.node.split(".")[0]')" = "$(cat Tools/Conformance/.nvmrc)"
       - name: Record release toolchain
         run: |
           swift --version

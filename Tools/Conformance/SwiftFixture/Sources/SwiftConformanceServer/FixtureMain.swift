@@ -36,7 +36,8 @@ import ServiceLifecycle
                 try await group.waitForAll()
             }
         }, shutdown: { await FixtureTasks.runtime.shutdown() })
-        let service = try ServerService(server: fixture.server, components: [tasks, component])
+        let components = [tasks, component]
+        let service = try ServerService(server: fixture.server, components: components)
         let logger = Logger(label: "referee-fixture", factory: { _ in SwiftLogNoOpLogHandler() })
         // Process signals are owned only by this standalone executable. Preserve
         // D29's nil candidate timers; the production service owns finite drain.
@@ -64,12 +65,12 @@ import ServiceLifecycle
                 } catch { service.requestShutdown(); group.cancelAll(); throw error }
             }
             let active = await fixture.server.activity, io = await fixture.transport.activity, report = await service.report
-            guard report.started == 1, report.joined == 1, report.failure == nil,
+            guard report.started == components.count, report.joined == components.count, report.failure == nil,
                   active.active == 0, active.requests == 0, active.bufferedBytes == 0, active.eventBytes == 0, active.subscriptions == 0,
                   active.inspections == 0, active.queuedInspections == 0,
                   io.connections == 0, io.requests == 0 else { throw FixtureFailure.ownership }
             await fixture.clear()
-            FileHandle.standardError.write(Data("FIXTURE_STOPPED joined=1 active=0\n".utf8))
+            FileHandle.standardError.write(Data("FIXTURE_STOPPED started=\(report.started) joined=\(report.joined) active=\(active.active)\n".utf8))
         } catch { await fixture.clear(); throw error }
     }
 }
