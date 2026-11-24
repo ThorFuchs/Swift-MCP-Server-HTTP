@@ -7,7 +7,7 @@ self="$root/Scripts/qualify-core-a16n-notifications.sh"
 checker="$root/Scripts/check-core-a16n-notifications.py"
 BASE_HTTP="c99b65a9ee7879187e6d67e9771b8daa30115502"
 BASE_CORE="02958abee82c363b879aa013c38229edb9a1c116"
-NEW_CORE="4e17ae77860d0a7d7b5431ad71eea93159403b7f"
+NEW_CORE="044e2ab332d9f55632c900c13f23502acd8e8972"
 export LC_ALL=C
 
 if [[ "${1:-}" == --case ]]; then

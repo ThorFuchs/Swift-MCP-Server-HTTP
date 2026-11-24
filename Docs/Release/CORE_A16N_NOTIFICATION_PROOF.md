@@ -1,7 +1,7 @@
 # Focused A1.6n notification latency proof
 
 Baseline: B3 HTTP `c99b65a9ee7879187e6d67e9771b8daa30115502`, Core `02958abee82c363b879aa013c38229edb9a1c116`.
-Candidate: Core draft PR #61 `4e17ae77860d0a7d7b5431ad71eea93159403b7f`. Same B3 HTTP fixture and
+Candidate: Core draft PR #61 `044e2ab332d9f55632c900c13f23502acd8e8972`. Same B3 HTTP fixture and
 referee 0.2.0-alpha.12. This separate diagnostic branch changes no production
 Swift, normal manifests or locks.
 
