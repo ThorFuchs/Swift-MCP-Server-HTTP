@@ -480,7 +480,7 @@ private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) 
     }
 
     @Test func nativeHTTPPeerDisconnectCancelsWithoutProviderCompletion() async throws {
-        await withKnownIssue(macOSEarlyEOFKnownIssue) {
+        do {
         let entered = HTTPCallCounter(),cancelled = HTTPCallCounter()
         let tool = ToolRegistration(definition:try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,_ in
             entered.increment()
@@ -797,7 +797,7 @@ private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) 
     }
 
     @Test func nativeHTTPRepeatedFINReleasesOwnersAndRecovers() async throws {
-        await withKnownIssue(macOSEarlyEOFKnownIssue) {
+        do {
         let entered = HTTPCallCounter(), cancelled = HTTPCallCounter()
         let tool = ToolRegistration(definition: try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,_ in
             entered.increment()
@@ -828,7 +828,7 @@ private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) 
     }
 
     @Test func nativeTLSPeerProcessExitCancelsBeforeResponseHead() async throws {
-        await withKnownIssue(macOSEarlyEOFKnownIssue) {
+        do {
         let entered = HTTPCallCounter(), cancelled = HTTPCallCounter()
         let tool = ToolRegistration(definition: try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,_ in
             entered.increment()
