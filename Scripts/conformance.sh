@@ -19,8 +19,23 @@ mkdir -p "$out"
 referee="$root/Tools/Conformance/node_modules/.bin/conformance"
 
 # 2. Fixture server.
-swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
-fixture="$(swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
+# Preserve normal CI behavior; B3 opts into the exact locked fixture graph.
+build_fixture() {
+    if [[ "${MCP_STRICT_RESOLUTION:-0}" == 1 ]]; then
+        swift build --force-resolved-versions "$@"
+    else
+        swift build "$@"
+    fi
+}
+build_fixture -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
+fixture="$(build_fixture -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
+
+if [[ "${MCP_STRICT_RESOLUTION:-0}" == 1 ]]; then
+    test -x "$fixture"
+    node -p 'require("./Tools/Conformance/node_modules/@modelcontextprotocol/conformance/package.json").version' > "$out/referee-version.txt"
+    test "$(cat "$out/referee-version.txt")" = 0.2.0-alpha.12
+    shasum -a 256 "$fixture" > "$out/fixture.sha256"
+fi
 
 # 3. Start it on 127.0.0.1:0 and wait for its readiness record.
 work="$(mktemp -d)"
@@ -43,10 +58,14 @@ echo "fixture ready at $url"
 set +e
 "$referee" server --url "$url" --requirements 2026-07-28 --output-dir "$out/results" --timeout 90000 > "$out/referee.stdout" 2> "$out/referee.stderr"
 referee_exit=$?
+printf 'scenario\treferee_exit\nserver-default\t%s\n' "$referee_exit" > "$out/referee-exits.tsv"
 # 5. Fixture-dependent extension scenarios the referee does not run by default (Skills).
 for scenario in sep-2640-skills-enumeration sep-2640-skills-manifest sep-2640-skills-directory; do
     "$referee" server --url "$url" --scenario "$scenario" --spec-version 2026-07-28 --force \
-        --output-dir "$out/extensions" --timeout 90000 >> "$out/extensions.stdout" 2>&1 || referee_exit=1
+        --output-dir "$out/extensions" --timeout 90000 >> "$out/extensions.stdout" 2>&1
+    extension_exit=$?
+    printf '%s\t%s\n' "$scenario" "$extension_exit" >> "$out/referee-exits.tsv"
+    [[ $extension_exit -eq 0 ]] || referee_exit=1
 done
 set -e
 python3 -I "$root/Scripts/conformance_summary.py" "$out/results" "$referee_exit" "$out/extensions"

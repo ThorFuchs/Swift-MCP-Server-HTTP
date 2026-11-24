@@ -59,3 +59,55 @@ Run the same proof runner at the new exact branch head. Expect 43/43 functions
 (98 cases) in each Debug and Release, both executable products in both
 configurations, and unchanged dependency bytes. Full native B2 execution,
 official referees and independent HTTP release gates are still open.
+
+
+## B2 native return — PASS (2026-11-24)
+
+Archive `core-a16e-http-WMGwri43.tar.gz` (19,055 bytes), SHA-256
+`44baccdb871ba8b727c2792d825b7c7535144f009d4e3952c216ab927c314fa1`.
+Exact HTTP source `cf70ddd382fbafaf5688c841d1b361dedb8c841f`, integrated Core `02958abee82c363b879aa013c38229edb9a1c116`.
+All nine runner steps exit 0; 43/43 named functions (98/98 cases) in each
+configuration, four successful fixture executable builds, all six unmasked
+early-EOF test executions passed on official SwiftNIO 2.105.2. Both graphs
+contain the same 29 pins; all four dependency byte snapshots unchanged.
+No native HTTP release qualification claim; existing unused direct
+swift-service-lifecycle warning remains. The Core PR #60 has the detailed
+[receipt](https://github.com/ThorFuchs/Swift-MCP-Server/pull/60#issuecomment-7139507487).
+
+## B3 — official protocol referees
+
+Run on idle native macOS 27 / ARM64 with Swift 6.4.2, Node major 24 from
+`.nvmrc`, npm and Python 3. From a clean detached checkout at the exact B3
+commit, execute:
+
+    bash Scripts/qualify-core-a16e-referees.sh EXACT_HTTP_SHA "$HOME/MCP-A16E-Evidence"
+
+Uses the existing official `@modelcontextprotocol/conformance` npm package
+0.2.0-alpha.12 and `npm ci --ignore-scripts`, exact locked SwiftPM fixture
+builds, existing requirements/spec 2026-07-28, scenarios and deadlines.
+Four sequential legs: debug server, debug client, release server, release
+client. Both scripts have opt-in strict Swift resolution and record the
+actual fixture executable digest, installed referee version and individual
+referee exits. The normal (non-strict) build path is preserved.
+The server checker requires the historical 37 scored scenarios and all
+13 existing extension gates (10 Tasks and 3 forced Skills), checking raw
+files, uniqueness, nonempty successful checks and per-forced-scenario
+exit. Preserve the documented pending tasks-status-notifications distinction:
+if explicitly unscored and without successful checks, report pending, not
+a successful execution. Unscored non-gated diagnostic failures and
+warnings are reported, not silently promoted to passes or new release gates.
+The client checker requires all 37 selected scenarios including 25 auth
+scenarios, positive matching summary/raw successful checks and zero failures
+and exits. A missing raw result or incompatible output format fails closed.
+These are acceptance targets, not native B3 results. No protocol coverage
+beyond the pinned referee's scenarios is claimed.
+
+Archive original logs, checks.json and result directories, per-leg command
+and receipt status, fixture digests, Node/npm version, source and before/
+after SHA-256 receipts for four Swift and four npm input files. All legs
+are attempted after ordinary failure unless dependency drift blocks later
+legs. No pin, Swift implementation, fixture source, test, timeout, CI or
+main changes. Full HTTP release gates and Core AMD64/A2/A3/A4 remain separate.
+Local synthetic checker controls passed: complete server and client
+inventories, explicit pending case, rejection of empty, missing, duplicate,
+failed and inconsistent raw results. Native referee output is not yet tested.
