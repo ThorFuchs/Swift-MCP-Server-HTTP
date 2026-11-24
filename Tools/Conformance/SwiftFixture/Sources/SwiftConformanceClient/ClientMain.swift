@@ -27,9 +27,15 @@ struct ConformanceClient {
             }
             let client = Client(transport: HTTPClientTransport(endpoint: endpoint, timeout: .seconds(60)), configuration: .init(
                 info: try parse(#"{"name":"swift-conformance-client","version":"0.1.0"}"#),
-                elicitation: .init { _ in try parse(#"{"action":"accept","content":{"confirmed":true}}"#) },
-                sampling: { _ in try parse(#"{"role":"assistant","content":{"type":"text","text":"ok"},"model":"conformance"}"#) },
-                roots: { _ in try parse(#"{"roots":[]}"#) }))
+                elicitation: .init { _ in
+                    .accept(content: try JSONObject(members: [
+                        JSONMember("confirmed", value: .boolean(true))
+                    ]))
+                },
+                sampling: { _ in
+                    try SamplingResponse.text("ok", model: "conformance", stopReason: nil)
+                },
+                roots: { [] }))
             try await run(scenario, client: client, context: context)
             exit(0)
         } catch {

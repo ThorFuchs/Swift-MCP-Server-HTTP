@@ -69,7 +69,11 @@ private func withHTTP(_ server: Server, mode: HTTPTransport.ResponseMode, _ body
         try await withHTTP(server, mode: mode) { endpoint in
             let client = Client(transport: HTTPClientTransport(endpoint: endpoint), configuration: .init(
                 info: try json(#"{"name":"swift-client","version":"0.1"}"#),
-                elicitation: .init { _ in try json(#"{"action":"accept","content":{"name":"Ada"}}"#) }))
+                elicitation: .init { _ in
+                    .accept(content: try JSONObject(members: [
+                        JSONMember("name", value: .string("Ada"))
+                    ]))
+                }))
             #expect(try await client.discover().supportedVersions.contains("2026-07-28"))
             #expect(try await client.listTools().items.map(\.name).sorted() == ["greet", "regional", "slow"])
             // Mcp-Name and Mcp-Param-* are checked by the server against the body; non-ASCII is base64.
@@ -89,7 +93,7 @@ private func withHTTP(_ server: Server, mode: HTTPTransport.ResponseMode, _ body
             let events = Mutex<[String]>([])
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    try await client.listen(try json(#"{"toolsListChanged":true}"#)) { event in
+                    try await client.listen(SubscriptionFilter(toolsListChanged: true)) { event in
                         switch event {
                         case .acknowledged: events.withLock { $0.append("ack") }
                         case .toolsChanged: events.withLock { $0.append("tools") }
