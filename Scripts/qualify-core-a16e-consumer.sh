@@ -81,54 +81,7 @@ filter='HTTPClientTransportCases|AuthorizationRetry|OAuthClientCodeFlow|OAuthCli
 failed=0
 for mode in debug release; do
     run "$mode-consumer" swift test --force-resolved-versions -c "$mode" --filter "$filter" || failed=1
-    run "$mode-receipt" python3 - "$out/$mode-consumer.log" <<'PY' || failed=1
-import re, sys
-from pathlib import Path
-s = Path(sys.argv[1]).read_text(errors="replace")
-for name in (
-    "listenStreamsOverServerSentEvents",
-    "serverSentEventsParseSplitLinesCommentsAndMultilineData",
-    "aChallengeIsAnsweredAndTheRequestSentOnceMore",
-    "aRequestIsRetriedAtMostOnce",
-    "aStepUpMayFollowAFirstAuthorization",
-    "noRetryWithoutNewCredentials",
-    "authorizesWithPKCEResourceAndStateThenSendsBearer",
-    "acceptsAMissingIssWhenTheServerDoesNotAdvertiseIt",
-    "rejectsForgedStateAndDeniedAuthorization",
-    "rejectsTokensOtherThanBearer",
-    "concurrentChallengesShareOneAuthorization",
-    "metadataWithAnotherIssuerIsNotUsed",
-    "aResourceThatDoesNotCoverTheEndpointStopsDiscovery",
-    "candidateURLsFollowRFC8414AndRFC9728",
-    "httpsPolicyIsUnchangedByTheLoopbackRules",
-    "aLookalikeLoopbackTokenEndpointReceivesNoCodeOrRegistration",
-    "preRegisteredClientsAuthenticateWithFormEncodedBasicCredentials",
-    "registeredClientsUseTheMethodTheServerAssigned",
-    "metadataDocumentsReplaceRegistrationWhenSupported",
-    "scopeComesFromTheChallengeElseTheResourceElseIsOmitted",
-    "stepUpAsksForTheUnionOfScopesAndOfflineAccess",
-    "offlineAccessOnlyWhenOfferedAndWanted",
-    "stepUpsStopAtTheLimitAndNeedInsufficientScope",
-    "aRejectedTokenIsRefreshedWithoutTheUser",
-    "aFailedRefreshFallsBackToAuthorization",
-    "fragmentInAuthorizationRedirectIsRejected",
-    "proactiveRefreshPersistenceFailureIsSurfacedAndRecovers",
-    "tokensAreRefreshedShortlyBeforeTheyExpire",
-    "aNewAuthorizationServerGetsItsOwnClientAndNoOldCredentials",
-    "opaquePKCEVerifierSubstringIsNotAnOldRefreshToken",
-    "storedAuthorizationSurvivesARestart",
-    "storeFailuresAreReported",
-    "findsTheBearerChallengeAmongOthers",
-    "nativeHTTPPeerDisconnectCancelsWithoutProviderCompletion",
-    "nativeHTTPRepeatedFINReleasesOwnersAndRecovers",
-    "nativeTLSPeerProcessExitCancelsBeforeResponseHead",
-):
-    assert re.search(r"Test " + name + r"\(\).*passed", s), f"Missing successful execution: {name}"
-assert not re.search(r"recorded a known issue|recorded an issue|Test run with .* failed", s)
-counts = [int(n) for n in re.findall(r"Test run with (\d+) tests?(?: in [^\n]*?)? passed", s)]
-assert sum(counts) == 36, counts
-print("Selected test executions:", sum(counts))
-PY
+    run "$mode-receipt" python3 -I Scripts/check-core-a16e-consumer-receipts.py "$out/$mode-consumer.log" || failed=1
     # Outside-root SwiftPM consumer links both real executable products.
     for product in SwiftConformanceServer SwiftConformanceClient; do
         run "$mode-$product" swift build --force-resolved-versions -c "$mode" \
