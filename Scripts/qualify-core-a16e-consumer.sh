@@ -85,15 +85,48 @@ for mode in debug release; do
 import re, sys
 from pathlib import Path
 s = Path(sys.argv[1]).read_text(errors="replace")
-for name in ("nativeHTTPPeerDisconnectCancelsWithoutProviderCompletion",
-             "nativeHTTPRepeatedFINReleasesOwnersAndRecovers",
-             "nativeTLSPeerProcessExitCancelsBeforeResponseHead",
-             "listenStreamsOverServerSentEvents",
-             "authorizesWithPKCEResourceAndStateThenSendsBearer"):
+for name in (
+    "listenStreamsOverServerSentEvents",
+    "serverSentEventsParseSplitLinesCommentsAndMultilineData",
+    "aChallengeIsAnsweredAndTheRequestSentOnceMore",
+    "aRequestIsRetriedAtMostOnce",
+    "aStepUpMayFollowAFirstAuthorization",
+    "noRetryWithoutNewCredentials",
+    "authorizesWithPKCEResourceAndStateThenSendsBearer",
+    "acceptsAMissingIssWhenTheServerDoesNotAdvertiseIt",
+    "rejectsForgedStateAndDeniedAuthorization",
+    "rejectsTokensOtherThanBearer",
+    "concurrentChallengesShareOneAuthorization",
+    "metadataWithAnotherIssuerIsNotUsed",
+    "aResourceThatDoesNotCoverTheEndpointStopsDiscovery",
+    "candidateURLsFollowRFC8414AndRFC9728",
+    "httpsPolicyIsUnchangedByTheLoopbackRules",
+    "aLookalikeLoopbackTokenEndpointReceivesNoCodeOrRegistration",
+    "preRegisteredClientsAuthenticateWithFormEncodedBasicCredentials",
+    "registeredClientsUseTheMethodTheServerAssigned",
+    "metadataDocumentsReplaceRegistrationWhenSupported",
+    "scopeComesFromTheChallengeElseTheResourceElseIsOmitted",
+    "stepUpAsksForTheUnionOfScopesAndOfflineAccess",
+    "offlineAccessOnlyWhenOfferedAndWanted",
+    "stepUpsStopAtTheLimitAndNeedInsufficientScope",
+    "aRejectedTokenIsRefreshedWithoutTheUser",
+    "aFailedRefreshFallsBackToAuthorization",
+    "fragmentInAuthorizationRedirectIsRejected",
+    "proactiveRefreshPersistenceFailureIsSurfacedAndRecovers",
+    "tokensAreRefreshedShortlyBeforeTheyExpire",
+    "aNewAuthorizationServerGetsItsOwnClientAndNoOldCredentials",
+    "opaquePKCEVerifierSubstringIsNotAnOldRefreshToken",
+    "storedAuthorizationSurvivesARestart",
+    "storeFailuresAreReported",
+    "findsTheBearerChallengeAmongOthers",
+    "nativeHTTPPeerDisconnectCancelsWithoutProviderCompletion",
+    "nativeHTTPRepeatedFINReleasesOwnersAndRecovers",
+    "nativeTLSPeerProcessExitCancelsBeforeResponseHead",
+):
     assert re.search(r"Test " + name + r"\(\).*passed", s), f"Missing successful execution: {name}"
 assert not re.search(r"recorded a known issue|recorded an issue|Test run with .* failed", s)
 counts = [int(n) for n in re.findall(r"Test run with (\d+) tests?(?: in [^\n]*?)? passed", s)]
-assert sum(counts) >= 5, counts
+assert sum(counts) == 36, counts
 print("Selected test executions:", sum(counts))
 PY
     # Outside-root SwiftPM consumer links both real executable products.
