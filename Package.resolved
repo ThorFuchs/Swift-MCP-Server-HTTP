@@ -150,7 +150,7 @@
       "location" : "https://github.com/ThorFuchs/Swift-MCP-Server.git",
       "state" : {
         "branch" : "main",
-        "revision" : "d892bd34add1ad067ae6f286bd74c824486d8c07"
+        "revision" : "02958abee82c363b879aa013c38229edb9a1c116"
       }
     },
     {
@@ -239,8 +239,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ThorFuchs/Swift-SQLite.git",
       "state" : {
-        "revision" : "448cc8d9507f1ff6adce3eeac44568cc364ed5c3",
-        "version" : "0.2.0"
+        "revision" : "df12fe55265de81e2fc4bca91cb85704343b528f",
+        "version" : "1.2.0"
       }
     },
     {
