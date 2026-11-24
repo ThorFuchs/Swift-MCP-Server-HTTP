@@ -1,0 +1,11 @@
+# A1.6n.2 — diagnostic delivery trace
+
+N1 candidate Core 044e2ab332d9f55632c900c13f23502acd8e8972, trace-only descendant a2a4d3f3d11122c3e596a27277fe820b4ef2c647. HTTP branch based on the immutable N1 runner f7ca22e42ef26032106c6eaebce42fac21708686. No changes to normal HTTP transport, fixture semantics, checked-in dependency manifests/locks, referee scenarios or deadlines. No new PR or CI runs during A2.1. Do not merge these diagnostic branches.
+
+The N1 archive (SHA-256 b45288d8418a2d631ae02f27dda1cb26017bf720fa0e2a6c5a3f8ab147e9c3c8) confirmed 234/240 successful checks, six prompt SHOULD warnings only, and much faster catalog replacement; it did not establish whether the prompt subscription closed before publication or delivery failed. Trace monotonic process-local chronology from registration/ack, mutation, target selection to Core queue and sink; local sink return is HTTP mailbox write acknowledgment, not remote observation. No raw wire IDs or payloads in the new trace. Existing official synthetic referee raw results are retained.
+
+Run on idle Studio after A2.1, Node 24 and Swift 6.4.2:
+
+    bash Scripts/qualify-core-a16n2-trace.sh EXACT_HTTP_SHA "$HOME/MCP-A16E-Evidence"
+
+One disposable clone, exact trace Core revision in both workspaces, unchanged other 28 pins, actual Core checkout verification, strict builds and per-leg byte checks. Four fresh processes: same Debug executable with trace disabled once, enabled twice, and Release with trace enabled once. The trace-disabled binary still contains diagnostic code; compare historical uninstrumented N1 results; trace I/O can perturb timing. All four run server-stateless unchanged (30 checks, original 90 s and 60 s bounds). For diagnosis only, original prompt SHOULD warnings remain admissible as observations, not execution passes. All other failures rejected; N1 strict candidate acceptance remains unchanged. Trace receipt verifies bounded contiguous events and actual publication/ack observations, not root cause or full protocol correctness. Archive exact installed npm referee dist JS and hashes to determine observation windows from the pinned package, without changing its code. Exact source could not be retrieved on authoring host; native capture still required. Preserve raw logs and partial evidence on failure. No native compile or runtime claim at authoring time.

@@ -24,6 +24,7 @@ public actor FixtureEvents {
     func mutate(_ event: SubscriptionEvent) async throws {
         guard let server, !busy, revision < 64 else { throw CoreFailure.limit }
         busy = true; defer { busy = false }
+        traceMutation("begin", event: event)
         // Register each dynamic synthetic entry once. Subsequent hooks model
         // externally changed backing content and publish the reference event;
         // they do not recompile an unchanged full catalog on every request.
@@ -38,14 +39,28 @@ public actor FixtureEvents {
             try await server.replaceCatalog(catalog)
             preparationPublication = nanoseconds(built.duration(to: .now))
             dynamicTools = tools; dynamicPrompts = prompts
+            traceMutation("catalog.published", event: event)
         }
         revision += 1
         let notifying = ContinuousClock.now
+        traceMutation("publish.begin", event: event)
         try await server.publish(event, audience: .requiringScopes([]))
+        traceMutation("publish.return", event: event)
         let notificationAdmission = nanoseconds(notifying.duration(to: .now))
         let kind: String
         switch event { case .toolsChanged: kind = "tools"; case .promptsChanged: kind = "prompts"; default: kind = "resource" }
         FileHandle.standardError.write(Data("FIXTURE_MUTATION kind=\(kind) construction_ns=\(construction) preparation_publication_ns=\(preparationPublication) notification_admission_ns=\(notificationAdmission) total_ns=\(nanoseconds(started.duration(to: .now)))\n".utf8))
+    }
+    // Diagnostic fixture only; shares the Core trace's process clock.
+    private func traceMutation(_ phase: String, event: SubscriptionEvent) {
+        guard ProcessInfo.processInfo.environment["MCP_A16N_TRACE"] == "1" else { return }
+        let kind: String
+        switch event {
+        case .toolsChanged: kind = "tools"
+        case .promptsChanged: kind = "prompts"
+        default: return
+        }
+        FileHandle.standardError.write(Data("N2_FIXTURE ns=\(DispatchTime.now().uptimeNanoseconds) event=\(phase) kind=\(kind)\n".utf8))
     }
     private func nanoseconds(_ duration: Duration) -> Int64 {
         let parts = duration.components, first = parts.seconds.multipliedReportingOverflow(by: 1000000000)
