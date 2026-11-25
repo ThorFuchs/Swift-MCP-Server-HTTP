@@ -29,3 +29,40 @@ Run after Core CI and after host/storage admission; no parallel heavy runner wor
     python3 -I Scripts/qualify-core-a16n4-http.py EXACT_RUNNER_SHA /absolute/path/to/evidence
 
 Use a clean detached checkout of the exact diagnostic runner SHA and preferably the verified writable Backup volume if internal free space remains low. The runner creates an isolated checkout, retains logs and produces core-a16n4-http-*.tar.gz even on ordinary failure. It verifies the native fixture binary digest immediately before/after each fresh N3.2 leg and rechecks all eight input bytes, actual Core checkouts and working-tree status. Only `PASS_SCOPED_A16N4_HTTP_AND_N32` with both native raw-wire receipts and all B2/B3 gates passing is a scoped combined external pass. Original official warning and six skips remain visible. No release tag, no final RC1 GO or merge authorization; Core #29, #30, AMD64 and final graph qualification remain separate.
+
+
+## N4.4 native return — scoped PASS (2026-11-25)
+
+Maintainer-provided archive `core-a16n4-http-2rdz1o54.tar.gz`, 277,536 bytes, 815 tar members, 500 regular files, SHA-256 `34319014463e9373225ed31f722d9cfacb352cab4390d211a58e1655b8d0bf51`. Reopened and checked without modifying or extracting the archive. Exact runner `652b0fef42315b2c61175eb62832fab73dafd66b`, combined Core `4d0324921a2ce06f9d6a6414442a701817a31bec`, HTTP B3 `c99b65a9ee7879187e6d67e9771b8daa30115502`. Native Darwin arm64 / macOS 27.3 / Apple Swift 6.4.2 / Node v24.22.3 / npm 11.19.1. Summary exit 0; decision **PASS_SCOPED_A16N4_HTTP_AND_N32**, release_gate=NOT_EVALUATED.
+
+All 30 named qualification steps have exit 0; 18 Python and 12 Node harness controls passed. The two consumer receipt checkers each report 43/43 functions, seven parameterized functions and 98 individual cases (196 cumulative); four actual fixture build/link legs passed. The official referee results were independently enumerated from all 180 archived checks.json files and the exit ledgers:
+
+| Leg | Scenario records | SUCCESS | WARNING | SKIPPED | INFO | Zero exits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Debug server | 53 | 241 | 1 | 1 | 0 | 4/4 |
+| Release server | 53 | 242 | 0 | 1 | 0 | 4/4 |
+| Debug client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+| Release client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+
+Total 1,281 SUCCESS, 0 FAILURE, 1 WARNING, 6 SKIPPED, 756 INFO; 82/82 command exits zero. Each server leg reports 37/37 required and 12 extension scenarios with successful checks; the pending Tasks status-notifications case is skipped, not passed. Both client legs report 37/37 named scenarios, including 25 OAuth; two historical Mcp-Method header skips per client leg. The sole warning is the original Debug prompt observation SHOULD check, with the exact historical ID and message. No new warning/skip/failure; original alpha.12 result preserved. This is a scoped regression, not a warning-free official conformance claim or retroactive N1 pass.
+
+### N3.2 — independent native wire results
+
+Both fresh fixture processes produce PASS_N32_WIRE. Independently checked the individual wire-receipt.json records against n32-receipts.json, the acknowledged filter/ID and received notification method/ID, and the exact catalog-set deltas (only the expected dynamic prompt/tool added, other catalog unchanged).
+
+| Mode | Catalog | ACK / notification ID | Mutation RPC ms | Observed notification ms |
+| --- | --- | ---: | ---: | ---: |
+| Debug | prompts | 13 | 4449.567 | 4447.086 |
+| Debug | tools | 14 | 4645.967 | 4646.066 |
+| Release | prompts | 13 | 464.923 | 468.302 |
+| Release | tools | 14 | 471.493 | 474.746 |
+
+Times are relative to the probe's mutation start, not server-internal timestamps or isolated notification transport latency. The Debug prompt notification arrives before RPC completion; the probe deliberately accepts correlated notification during or after the successful mutation. Both Debug observations exceed the original referee's 1.5 s opening-to-observation timer, consistent with the prior causal trace. No new controlled A/B speedup, universal delivery guarantee, or claim that the upstream referee patch has been accepted.
+
+Each mode records two closed streams, successful post-close listings, and fixture exit code 0 with no signal; all four server processes (official and independent) have the existing `FIXTURE_STOPPED started=2 joined=2 active=0` marker. Post-close lists show service availability, not an independent count of subscriptions before shutdown. The N3.2 fixture digest matches the corresponding official server fixture receipt in both configurations. Executable and installed referee bundle bytes are not included in the archive; integrity at runtime is attested by the runner's recorded successful checks, not independently rehashed from omitted binaries.
+
+### Dependency and scope review
+
+All 29 complete pin records match expected/root/fixture before, after and resolved lock snapshots, including exact combined Core, official SwiftNIO 2.105.2 and Swift-SQLite 1.2.0. All ten eight-file input hash snapshots equal; the root/fixture/npm before and after archived lockfiles are byte-identical and independently SHA-256 verified against the manifest. All nine graph verification logs confirm both actual Core checkouts and 29 pins; all nine raw status receipts contain only the four expected unstaged diagnostic manifest/lockfile changes. Existing unused swift-service-lifecycle dependency and unnecessary try effect-marker warnings remain in the diagnostic HTTP consumer logs; no warning-free HTTP build claim.
+
+Pre-merge Core CI: [normal](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/45669090782) 688/688 and [optimized](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/45670519886) 1,376/1,376 function executions; both source trees identical to the combined candidate. The A2.1 post-merge run separately passed 680/680. N4.4 satisfies the documented scoped external gate for Core PR #61. N4.5 integration is a separate maintainer decision and exact merged-main CI. No generated archives or absolute host paths committed. No current HTTP/main release-graph qualification, final RC1 GO, or closure of remaining #29/#30/platform gates.
