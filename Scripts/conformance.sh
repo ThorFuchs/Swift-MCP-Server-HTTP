@@ -13,14 +13,15 @@ case "$configuration" in
 esac
 out="${1:-$root/.build/conformance/$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$out"
+[[ -z "$(ls -A "$out")" ]] || { echo "Use a fresh server conformance output directory: $out" >&2; exit 1; }
 
 # 1. Referee: the exact pinned version from package-lock.json, without install scripts.
 (cd Tools/Conformance && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error)
 referee="$root/Tools/Conformance/node_modules/.bin/conformance"
 
 # 2. Fixture server.
-swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
-fixture="$(swift build -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
+swift build --force-resolved-versions -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --product SwiftConformanceServer
+fixture="$(swift build --force-resolved-versions -c "$configuration" -j "${SWIFT_BUILD_JOBS:-2}" --package-path Tools/Conformance/SwiftFixture --show-bin-path)/SwiftConformanceServer"
 
 # 3. Start it on 127.0.0.1:0 and wait for its readiness record.
 work="$(mktemp -d)"
@@ -38,15 +39,7 @@ done
 url="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["nonce"]==sys.argv[2]; print(d["url"])' "$work/ready.json" "$nonce")"
 echo "fixture ready at $url"
 
-# 4. Referee run, then an independent summary of every scenario's checks. Catalog mutations re-prepare schemas; the existing 90 s referee
-#    timeout is unchanged for both debug and release fixtures.
-set +e
-"$referee" server --url "$url" --requirements 2026-07-28 --output-dir "$out/results" --timeout 90000 > "$out/referee.stdout" 2> "$out/referee.stderr"
-referee_exit=$?
-# 5. Fixture-dependent extension scenarios the referee does not run by default (Skills).
-for scenario in sep-2640-skills-enumeration sep-2640-skills-manifest sep-2640-skills-directory; do
-    "$referee" server --url "$url" --scenario "$scenario" --spec-version 2026-07-28 --force \
-        --output-dir "$out/extensions" --timeout 90000 >> "$out/extensions.stdout" 2>&1 || referee_exit=1
-done
-set -e
-python3 -I "$root/Scripts/conformance_summary.py" "$out/results" "$referee_exit" "$out/extensions"
+# 4. Execute the frozen server requirements and separately gated Skills. The
+# gate records each process exit, validates raw receipts against the exact
+# scenario sets, and preserves warnings and the known upstream Tasks skip.
+python3 -I "$root/Scripts/conformance_summary.py" "$root" "$referee" "$url" "$out"
