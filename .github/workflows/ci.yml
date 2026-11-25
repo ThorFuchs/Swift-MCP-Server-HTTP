@@ -11,12 +11,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   macos-27:
-    # Needs a self-hosted macOS 27 runner labelled `macos-27` (GitHub-hosted runners lack
-    # Xcode 27). Skipped until the repository variable HAS_MACOS27_RUNNER is `true`.
+    # Studio only: no hosted fallback and no execution of fork PR code.
     if: >-
-      vars.HAS_MACOS27_RUNNER == 'true' &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, macOS, macos-27]
+      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, macos-27, mcp-studio]
     timeout-minutes: 90
     # Swift-MCP-Server is private: git and SwiftPM fetch it with a read-only token (Contents:
     # read on that repository only). Job-scoped through environment variables, so nothing is
@@ -30,6 +28,23 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Reserve private local Studio evidence directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          root="$HOME/MCP-HTTP-CI-Evidence"
+          mkdir -p "$root"
+          evidence="$(mktemp -d "$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_JOB}.XXXXXX")"
+          printf 'MCP_HTTP_CI_EVIDENCE_DIR=%s\n' "$evidence" >> "$GITHUB_ENV"
+          {
+            printf 'runner=%s\njob=%s\nrun=%s\nattempt=%s\nsource=%s\n' "$RUNNER_NAME" "$GITHUB_JOB" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$(git rev-parse HEAD)"
+            uname -sm
+            sw_vers
+            xcodebuild -version
+            swift --version
+          } | tee "$evidence/provenance.txt"
+          echo "Local evidence: $evidence"
       - name: Select pinned Node for conformance
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -40,23 +55,30 @@ jobs:
           npm --version
           test "$(node -p 'process.versions.node.split(".")[0]')" = "$(cat Tools/Conformance/.nvmrc)"
       - run: swift --version
-      - run: Scripts/test.sh
-      - run: Scripts/conformance.sh "$RUNNER_TEMP/conformance"
-      - run: Scripts/client-conformance.sh "$RUNNER_TEMP/client-conformance"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
-        with:
-          name: conformance
-          path: |
-            ${{ runner.temp }}/conformance
-            ${{ runner.temp }}/client-conformance
+      - name: Debug SDK tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          Scripts/test.sh 2>&1 | tee "$MCP_HTTP_CI_EVIDENCE_DIR/sdk-debug.log"
+      - name: Official server referee (Debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          Scripts/conformance.sh "$MCP_HTTP_CI_EVIDENCE_DIR/conformance" 2>&1 | tee "$MCP_HTTP_CI_EVIDENCE_DIR/server-debug.log"
+      - name: Official client referee (Debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          Scripts/client-conformance.sh "$MCP_HTTP_CI_EVIDENCE_DIR/client-conformance" 2>&1 | tee "$MCP_HTTP_CI_EVIDENCE_DIR/client-debug.log"
 
   macos-27-release:
-    # Independent optimized build and actual release-binary referee verification.
+    # Independent optimized build on the same physical Studio, not the MacBook.
     if: >-
-      vars.HAS_MACOS27_RUNNER == 'true' &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, macOS, macos-27]
+      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, macos-27, mcp-studio]
     timeout-minutes: 90
     env:
       GIT_CONFIG_COUNT: "1"
@@ -66,6 +88,23 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Reserve private local Studio evidence directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          root="$HOME/MCP-HTTP-CI-Evidence"
+          mkdir -p "$root"
+          evidence="$(mktemp -d "$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_JOB}.XXXXXX")"
+          printf 'MCP_HTTP_CI_EVIDENCE_DIR=%s\n' "$evidence" >> "$GITHUB_ENV"
+          {
+            printf 'runner=%s\njob=%s\nrun=%s\nattempt=%s\nsource=%s\n' "$RUNNER_NAME" "$GITHUB_JOB" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$(git rev-parse HEAD)"
+            uname -sm
+            sw_vers
+            xcodebuild -version
+            swift --version
+          } | tee "$evidence/provenance.txt"
+          echo "Local evidence: $evidence"
       - name: Select pinned Node for conformance
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -80,31 +119,40 @@ jobs:
           swift --version
           uname -sm
       - name: Optimize and test HTTP SDK and both conformance fixtures
-        run: bash Scripts/qualify-release.sh full
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          bash Scripts/qualify-release.sh full 2>&1 | tee "$MCP_HTTP_CI_EVIDENCE_DIR/sdk-release.log"
       - name: Run official server referee against optimized fixture
         env:
           MCP_HTTP_FIXTURE_CONFIGURATION: release
-        run: Scripts/conformance.sh "$RUNNER_TEMP/release-conformance"
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          Scripts/conformance.sh "$MCP_HTTP_CI_EVIDENCE_DIR/release-conformance" 2>&1 | tee "$MCP_HTTP_CI_EVIDENCE_DIR/server-release.log"
       - name: Run official client referee against optimized fixture
         env:
           MCP_HTTP_FIXTURE_CONFIGURATION: release
-        run: Scripts/client-conformance.sh "$RUNNER_TEMP/release-client-conformance"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
-        with:
-          name: release-conformance
-          path: |
-            ${{ runner.temp }}/release-conformance
-            ${{ runner.temp }}/release-client-conformance
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          Scripts/client-conformance.sh "$MCP_HTTP_CI_EVIDENCE_DIR/release-client-conformance" 2>&1 | tee "$MCP_HTTP_CI_EVIDENCE_DIR/client-release.log"
 
   linux-release-compile:
-    # Compile-only discovery, not a Linux runtime/conformance support claim.
-    # Access to the private Core dependency is restricted to same-repository PRs.
+    # The ARM64 Ubuntu VM shares the Studio's physical CPU with both native jobs.
+    # Run after both finish (even on test failure) to avoid competing with them.
+    # Compile-only evidence for Linux ARM64; no AMD64 or runtime support claim.
+    needs: [macos-27, macos-27-release]
     if: >-
-      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Linux, ARM64, swift-ci-linux]
     container:
-      image: swift@sha256:23d9b28ad97fb1cf1999edc3a0cb265ee915ed42299a9344e7173d5a6d2b05f4
+      # Same pinned Swift 6.4.2 multi-architecture image index as Core CI.
+      image: swift@sha256:bca121f6eb59fd80340d1296887b2698ed8f3eb9eca7d80c181f8af769dc7ee0
     timeout-minutes: 60
     env:
       GIT_CONFIG_COUNT: "1"
@@ -114,8 +162,14 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
-      - name: Confirm Swift 6.4.2 and Python on Linux
+      - name: Confirm Linux ARM64 runner, Swift 6.4.2 and Python
+        shell: bash
         run: |
+          set -euo pipefail
+          source_sha="$(git -c safe.directory="$GITHUB_WORKSPACE" -C "$GITHUB_WORKSPACE" rev-parse --verify HEAD)"
+          printf 'runner=%s\nsource=%s\n' "$RUNNER_NAME" "$source_sha"
+          uname -sm
+          test "$(uname -m)" = aarch64
           swift --version | tee /tmp/http-swift-version.txt
           grep -F 'Swift version 6.4.2' /tmp/http-swift-version.txt
           apt-get update -qq

@@ -20,10 +20,11 @@ including 25 `auth/*` scenarios (discovery, client identity, code flow, `iss`, s
 
 ## Known issues
 
-- On macOS, a client disconnect (FIN) while no read is pending is only noticed at the next read
-  or write, because upstream SwiftNIO disables early EOF on Darwin. Fix proposed in
-  [apple/swift-nio#3783](https://github.com/apple/swift-nio/pull/3783); three tests are marked
-  `withKnownIssue` until it ships.
+- SwiftNIO 2.105.2 is the minimum required version: it contains the early EOF fix for
+  macOS TCP connections ([apple/swift-nio#3783](https://github.com/apple/swift-nio/pull/3783)).
+  The three native disconnect tests are mandatory, not known-issue allowances.
+  See [HTTP #12](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/12)
+  for the independent release qualification; the earlier diagnostic proof is not a release result.
 - `swift-http-server` is pinned to a revision (pre-release dependency).
 
 ## Third-party directory listing
