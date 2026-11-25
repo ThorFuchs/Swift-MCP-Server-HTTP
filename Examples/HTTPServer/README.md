@@ -1,9 +1,18 @@
 # Standalone HTTP/TLS example
 
-Requires macOS27/SDK27/Swift tools6.4/language6. `Scripts/example_consumers.py HTTP`
-builds outside the source root and captures actual locks/graph/binary/resources.
-Hosts explicitly declare the SDK path and SDK/Vendor/swift-nio. The candidate is
-qualified locally; a public inherited dependency is still a release prerequisite.
+Requires macOS 27 / SDK 27 / Swift tools 6.4 / language mode 6. From the repository
+root, build the included example with:
+
+```sh
+swift build --package-path Examples/HTTPServer -c release
+```
+
+The example uses the local SDK package path. SwiftNIO 2.105.2 is now the SDK's
+released minimum; no local NIO candidate is needed. This example still declares
+Core's main branch and the audited raw HTTP-server revision. Resolve and inspect
+the actual example graph before running it. The fresh standalone consumer and
+immutable release dependency qualification remain open; H1 CI #64 qualified
+the separate conformance fixtures, not this exact example build.
 
 ExampleHTTPServer binds127.0.0.1 with `--port 0` by default. Stderr readiness reports
 the actual port after lifecycle readiness. `--sse` selects streamed responses;
