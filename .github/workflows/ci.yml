@@ -166,7 +166,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf 'runner=%s\nsource=%s\n' "$RUNNER_NAME" "$(git rev-parse HEAD)"
+          source_sha="$(git -c safe.directory="$GITHUB_WORKSPACE" -C "$GITHUB_WORKSPACE" rev-parse --verify HEAD)"
+          printf 'runner=%s\nsource=%s\n' "$RUNNER_NAME" "$source_sha"
           uname -sm
           test "$(uname -m)" = aarch64
           swift --version | tee /tmp/http-swift-version.txt
