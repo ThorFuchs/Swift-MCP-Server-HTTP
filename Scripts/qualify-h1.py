@@ -43,25 +43,39 @@ def expected_pins(data):
     return pins
 
 
-def validate_lock(data, expected, require_origin):
+def validate_lock(data, expected):
     actual = pinmap(data)
     require(actual == expected, 'unrelated pin drift or wrong NIO release')
-    if require_origin:
-        require(re.fullmatch('[0-9a-f]{64}', data.get('originHash', '')), 'missing SwiftPM origin hash')
+    # SwiftPM v3 allows absent originHash. Successful resolve can leave a seed
+    # lock byte-identical (native Swift 6.4.2 receipt 540jshab). A hash is
+    # metadata, not proof of the actual resolved source revisions.
+    origin = data.get('originHash')
+    if 'originHash' in data:
+        require(isinstance(origin, str) and re.fullmatch('[0-9a-f]{64}', origin),
+                'invalid SwiftPM origin hash')
+    return origin
 
 
 def check(root, expected, resolved):
+    receipt = {}
     for lock, pins in zip(LOCKS, expected):
-        validate_lock(json.loads((root / lock).read_text()), pins, resolved)
+        origin = validate_lock(json.loads((root / lock).read_text()), pins)
+        entry = {'originHash': origin, 'pin_count': len(pins), 'checkout_heads': {}}
         if resolved:
-            checkouts = lock.parent / '.build' / 'checkouts'
-            for identity in ('swift-nio', 'swift-mcp-server'):
-                matches = [p for p in (root / checkouts).iterdir() if p.name.lower() == identity]
+            checkouts = root / lock.parent / '.build' / 'checkouts'
+            require(checkouts.is_dir(), f'missing checkout directory: {checkouts}')
+            children = list(checkouts.iterdir())
+            for identity, pin in sorted(pins.items()):
+                require(pin['kind'] == 'remoteSourceControl', f'unexpected pin kind: {identity}')
+                matches = [p for p in children if p.name.lower() == identity.lower()]
                 require(len(matches) == 1, f'{checkouts}: missing/ambiguous {identity}')
-                actual = capture(matches[0], 'git', 'rev-parse', 'HEAD')
-                require(actual == pins[identity]['state']['revision'], f'{identity} checkout drift')
+                actual = capture(matches[0], 'git', 'rev-parse', '--verify', 'HEAD')
+                require(actual == pin['state']['revision'], f'{lock}: {identity} checkout drift')
+                entry['checkout_heads'][identity] = actual
+        receipt[str(lock)] = entry
     changed = set(capture(root, 'git', 'diff', '--name-only', 'HEAD').splitlines())
     require(changed <= {str(p) for p in LOCKS}, 'unexpected tracked file changes')
+    return receipt
 
 
 def run(root, out, label, *args, env=None):
@@ -98,14 +112,18 @@ def qualify(root, out, sha, mode, stages):
     expected = [expected_pins(json.loads(capture(root, 'git', 'show', f'{BASE}:{lock}'))) for lock in LOCKS]
     check(root, expected, False)
 
+    def record_graph(label):
+        receipt = check(root, expected, True)
+        (out / f'graph-{label}.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+
     def stage(label, *args, env=None):
         log = run(root, out, label, *args, env=env)
-        check(root, expected, True)
+        record_graph(label)
         stages.append(label)
         (out / 'passed-stages.json').write_text(json.dumps(stages, indent=2) + '\n')
         return log
 
-    # SwiftPM owns lockfile origin hashes. Refuse any re-resolution of Core or other pins.
+    # SwiftPM owns optional origin hashes. Refuse any re-resolution of Core or other pins.
     run(root, out, 'resolve-root', 'swift', 'package', 'resolve')
     run(root, out, 'resolve-fixture', 'swift', 'package', '--package-path', str(LOCKS[1].parent), 'resolve')
     stage('graph', sys.executable, '-I', 'Scripts/check-release-graph.py', *map(str, LOCKS))
@@ -117,7 +135,7 @@ def qualify(root, out, sha, mode, stages):
             content = log.read_text()
             require(f'{case}() passed' in content and 'known issue' not in content.lower(),
                     f'{label}: named unmasked pass not established')
-            check(root, expected, True)
+            record_graph(label)
             stages.append(label)
             (out / 'passed-stages.json').write_text(json.dumps(stages, indent=2) + '\n')
     (out / 'focused-PASS.txt').write_text('6/6 named unmasked executions; exact official NIO tag\n')
@@ -130,7 +148,7 @@ def qualify(root, out, sha, mode, stages):
         for role, script in (('server', 'conformance.sh'), ('client', 'client-conformance.sh')):
             stage(f'release-{role}', 'bash', f'Scripts/{script}', str(out / f'release-{role}-results'),
                   env={**os.environ, 'MCP_HTTP_FIXTURE_CONFIGURATION': 'release'})
-    check(root, expected, True)
+    record_graph('final')
 
 
 def main():
