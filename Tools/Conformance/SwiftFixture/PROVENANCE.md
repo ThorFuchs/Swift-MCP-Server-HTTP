@@ -15,7 +15,9 @@ Modern server/discover, per-request metadata, POST SSE, production subscriptions
 input_required and protected state are served by production products. Historical
 initialize/ping, GET streams, DELETE sessions/replay, SDK in-memory clients and
 standalone sampling/elicitation/roots requests from the reference are not adapted.
-Task extension diagnostics stay unsupported. Application data and host credentials
+Tasks and Skills extensions are now implemented by the synthetic fixture; historical
+unsupported-scope wording no longer describes current coverage. See the conformance
+README for required/extension classification and known skips. Application data and host credentials
 are absent. Fixture-only keys are random and independently generated for cursor and
 continuation purposes. Provider outcomes are pure and explicitly integrity-only;
 this fixture does not certify consuming external effect transactions.
