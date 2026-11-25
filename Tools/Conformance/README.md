@@ -15,10 +15,21 @@ products: schema validation, MRTR input rounds, protected state, POST JSON/SSE s
 catalog changes. It binds only `127.0.0.1:0` and writes a readiness record (nonce, PID, URL) once
 the listener is ready. Provenance: [PROVENANCE.md](SwiftFixture/PROVENANCE.md).
 
-The server additionally gates ten Tasks and three Skills extension scenarios.
-The upstream tasks-status-notifications check is skipped; three separate pending server
-diagnostics are not scored. Do not interpret an extension scenario pass as execution of
-every raw check.
+The server gate derives its required, Tasks and pending sets from the same
+hash-verified Core reference as the client gate. It checks exact and unique scenario
+receipts, positive executed checks, known statuses, aggregate summary counts and
+not-scored classification. Each of the three separately invoked Skills scenarios has
+its own stdout, stderr and process exit. An unexplained nonzero exit, missing or
+duplicate receipt, required/extension failure or unexpected skip fails the gate.
+
+Ten Tasks and three Skills scenarios are selected. The pinned referee returns a single
+SKIPPED check for tasks-status-notifications pending its subscriptions/listen rewrite;
+only that exact documented skip is accepted as KNOWN_UPSTREAM_SKIP, not a pass.
+Pending diagnostics must produce valid evidence but their test failures are non-scored.
+Warnings are reported separately, preserving the server referee's exit policy.
+Use a fresh output directory; plan.json, process-exits.json and, on a passing
+validation, summary.json retain the disposition and all raw check receipts remain
+available. See [H5.3](../../Docs/Release/H5_SERVER_CONFORMANCE_GATE.md).
 
 The client gate derives the required names from the frozen Core checkout file, verifies
 its Git blob ID and root/fixture Core revision, and separately gates one
@@ -29,5 +40,7 @@ raw checks receipt, consistent with its printed summary; skipped and INFO checks
 reported, not counted as successes. `plan.json` and `summary.json` record the selection
 and outcome. Use a fresh output directory.
 
-The new client gate has offline controls (`python3 -I Scripts/test-client-conformance-gate.py`).
-Native qualification of the revised gate is pending; historical CI #64 did not run it.
+Offline controls: `python3 -I Scripts/test-client-conformance-gate.py` and
+`python3 -I Scripts/test-server-conformance-gate.py`. H5.3 also replayed the
+historical H1 native raw archive against the new server validator. Fresh native
+execution of both strengthened gates is pending; historical CI #64 did not run them.
