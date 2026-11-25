@@ -50,3 +50,23 @@ Maintainer console return from original runner `16f13068522c84edb98d3732631acf9d
 The generic capture helper stripped significant leading porcelain status whitespace: a legitimate ` M Package.resolved` first line became `M Package.resolved`, and slicing at offset three produced `ackage.resolved`. Independently reproduced using a real temporary Git repository containing the four expected unstaged edits. The new dedicated status check retains the raw output bytes in each receipt and requires exactly the four expected ordinary unstaged modifications, with untracked files explicitly enumerated and rename detection disabled. No dependency/hash/test/referee/timeout acceptance criterion is relaxed. Seven real-Git regression controls passed on the authoring host, including the old-parser reproduction and six rejection cases. The revised repository test suite contains the prior eleven receipt controls plus seven working-tree controls; execute all eighteen on Studio before retrying native qualification. The precise contents of the original failed status receipt remain to be checked if there is any further unexpected change.
 
 The console also reports only 12 GiB available (98% capacity). Coordinate host availability and free sufficient scratch capacity before rebuilding; do not delete the failed archive or blindly remove existing workspaces. The corrected runner is not yet natively qualified. Core/HTTP production source and dependency graph, PR #57/#61 and parallel H1 remain untouched. No merge or tag.
+
+
+## A2.1b — native consumer return: PASS (2026-11-25)
+
+Maintainer-provided archive `core-a21-http-utl9vgw1.tar.gz`, 272,865 bytes, 792 tar members, 479 regular files, SHA-256 `5e8799bbd95045dead28432628f6d7458525bc88dad9fffb495e1fcf3f04638c`. Runner `d5a72f9bb963334c600e4c3ee7ed76da9795443f`, unchanged B3 HTTP `c99b65a9ee7879187e6d67e9771b8daa30115502`, sole selected Core revision `1237d9f11e580f9c68ba6d7064d0c16de7fa1cd3`. Native Darwin arm64, macOS 27.3, Apple Swift 6.4.2, Node 24.22.3, npm 11.19.1.
+
+All 24 runner steps exited 0; original summary exit 0 and decision **PASS_SCOPED_A21_HTTP_INTEROP**, release_gate=NOT_EVALUATED. Debug and Release each have 43/43 named consumer functions, seven parameterized functions with 62 individual argument cases plus 36 unparameterized cases (98/98 per mode); the four actual fixture product build/link legs and their recorded hash checks passed. Both server fixtures record started=2 joined=2 active=0.
+
+| Referee leg | Scenario records | SUCCESS | WARNING | SKIPPED | INFO | command exits 0 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Debug server | 53 | 241 | 1 | 1 | 0 | 4/4 |
+| Release server | 53 | 242 | 0 | 1 | 0 | 4/4 |
+| Debug client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+| Release client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+
+Independently reopened the archive and enumerated all 180 raw scenario receipts and 82 zero exit records. Total 1,281 SUCCESS, zero FAILURE, one exact historical Debug prompt subscription SHOULD WARNING, six SKIPPED, 756 INFO. The skip reasons are the pending Tasks subscription notification rewrite (one per server leg) and unexercised initialize/notifications/initialized Mcp-Method headers (two per client leg). Each server leg passes 37/37 required scenarios and has successful checks in 12 extension scenarios; one extension remains pending. Each client leg passes the 37 selected scenarios including 25 OAuth. Preserve actual official scores, not a warning-free or complete protocol coverage claim.
+
+All 29 full pin records match across root/fixture and expected graph; seven actual Core checkout verifications PASS. All eight input-hash snapshots are identical; three archived before/after lock pairs (root, fixture, npm) independently rehashed and match. All seven raw status receipts contain only the four expected ordinary unstaged manifest/lock edits; corrected status parser passes on the native graph. Executable and published referee integrity are established by the recorded successful runner checks, not independent rehashes of omitted binary/bundle bytes. Existing unused direct swift-service-lifecycle dependency warning and unnecessary try effect-marker diagnostics in HTTP OAuthClientTests.swift occur in both configurations; no warning-free HTTP build claim or Core source defect inferred.
+
+The original failed A2.1a attempt remains distinct. This return satisfies the scoped B2/B3-equivalent external gate for Core #57; it does not qualify the newer HTTP/main release graph, close Core #29, establish N3.2, or authorize a release tag. Core integration decision and post-merge CI are separate. No generated archive, private paths or machine-specific evidence files committed.
