@@ -8,6 +8,13 @@ import JSON
 import MCPProtocol
 import MCPServer
 
+// H4.1 diagnostic only: a cooperative checkpoint immediately before an output
+// API call. This is NOT a probe of NIO's actual outbound-writer suspension.
+enum HTTPOutputCheckpointPhase: Sendable, Equatable {
+    case head, metadata, notification, rejection
+}
+typealias HTTPOutputCheckpoint = @Sendable (HTTPOutputCheckpointPhase) async throws -> Void
+
 /// One-shot transport with a caller-owned run lifetime. Construction does not
 /// create a concrete listener (D11). Shutdown joins accepted-channel handlers.
 public actor HTTPTransport {
@@ -45,6 +52,7 @@ public actor HTTPTransport {
     private let server: Server, configuration: Configuration
     private let stop: AsyncStream<Void>, signal: AsyncStream<Void>.Continuation
     private let requests = HTTPRequestOwners()
+    private var outputCheckpoint: HTTPOutputCheckpoint? = nil
     public init(server: Server, configuration: Configuration) throws {
         guard configuration.admission.maximumBodyBytes <= server.configuration.messageBytes else { throw HTTPAdmission.Failure.invalidConfiguration }
         self.server = server; self.configuration = configuration
@@ -52,6 +60,11 @@ public actor HTTPTransport {
     }
     public struct Activity:Sendable { public let connections:Int, requests:Int; public let writeTimeouts:UInt64 }
     public var activity:Activity { get async { await requests.activity } }
+    // Internal, one-shot test setup; no public configuration or global hook.
+    func installOutputCheckpoint(_ checkpoint: @escaping HTTPOutputCheckpoint) throws {
+        guard state == .idle, outputCheckpoint == nil else { throw CoreFailure.duplicate }
+        outputCheckpoint = checkpoint
+    }
     public func shutdown() { if state == .running { state = .stopping; signal.yield(()); signal.finish() } }
     public func run(ready: @escaping @Sendable (Address) async throws -> Void) async throws {
         guard state == .idle else { throw CoreFailure.duplicate }
@@ -74,7 +87,7 @@ public actor HTTPTransport {
             readHeader:nil,readBody:.milliseconds(configuration.ioMilliseconds))
         nio.gracefulShutdown = .init(maximumGracefulShutdownDuration:.milliseconds(configuration.drainMilliseconds))
         let listener = NIOHTTPServer(configuration:nio)
-        let handler = MCPHTTPRequestHandler(server:server,configuration:configuration,owners:requests)
+        let handler = MCPHTTPRequestHandler(server:server,configuration:configuration,owners:requests,outputCheckpoint:outputCheckpoint)
         try await withThrowingTaskGroup(of:Completion.self) { group in
             group.addTask { [configuration] in try await listener.serve(connectionHandler:MCPHTTPConnectionHandler(handler:handler,limit:configuration.connections)); return .listener }
             group.addTask { [requests] in
@@ -168,6 +181,7 @@ private struct HTTPConnectionComplete:Error {}
 
 private struct MCPHTTPRequestHandler: HTTPServerRequestHandler {
     let server:Server, configuration:HTTPTransport.Configuration, owners:HTTPRequestOwners
+    let outputCheckpoint: HTTPOutputCheckpoint?
     func handle(request:HTTPRequest, requestContext:consuming NIOHTTPServer.RequestContext,
                 reader:consuming sending NIOHTTPServer.Reader,
                 responseSender:consuming sending NIOHTTPServer.ResponseSender) async throws {
@@ -188,6 +202,7 @@ private struct MCPHTTPRequestHandler: HTTPServerRequestHandler {
             try configuration.authority.validate(authority:host,origin:requestOrigin,boundPort:local.port)
             if case .protectedResource(let access, _) = configuration.security,
                request.method == .get, let response = access.metadata(path:request.path ?? "") {
+                try await outputCheckpoint?(.metadata)
                 try await response.send(sender.take()!); return
             }
             try configuration.admission.validate(method:request.method.rawValue,path:request.path ?? "",headers:headers)
@@ -208,6 +223,7 @@ private struct MCPHTTPRequestHandler: HTTPServerRequestHandler {
                 let ingress = try await server.inspectIngress(bytes,principal:principal,origin:origin,acceptNotifications:false,responseCopyMultiplier:4,responseFixedWork:UInt64(min(server.configuration.deadlineMilliseconds,configuration.ioMilliseconds) / 10 + 258))
                 switch ingress {
                 case .notification:
+                    try await outputCheckpoint?(.notification)
                     try await HTTPStaticResponse(status:400).send(sender.take()!)
                 case .request(let ticket):
                     await owners.attach(ticket.correlation,to:owner)
@@ -254,6 +270,7 @@ private struct MCPHTTPRequestHandler: HTTPServerRequestHandler {
                             head.headerFields[.contentType] = streaming && first.status == 200 ? "text/event-stream" : "application/json"
                             head.headerFields[.cacheControl] = "no-store"
                             if streaming && first.status == 200 { head.headerFields[HTTPField.Name("X-Accel-Buffering")!] = "no" }
+                            try await outputCheckpoint?(.head)
                             let writer = try await sender.take()!.send(head)
                             let outputWriter = HTTPStreamWriter(writer)
                             async let output:Void = outputWriter.write(first:first,streaming:streaming && first.status == 200,mailbox:mailbox,maximumBytes:server.configuration.resultBytes,ioMilliseconds:configuration.ioMilliseconds,maximumTicks:Int(server.configuration.deadlineMilliseconds / 10 + 2))
@@ -284,6 +301,7 @@ private struct MCPHTTPRequestHandler: HTTPServerRequestHandler {
             // connection cannot carry another request. Say so instead of letting a client
             // reuse it and fail ("other side closed"), then end it deliberately.
             let unread = reader != nil
+            try await outputCheckpoint?(.rejection)
             try await response.send(responseSender, closing:unread)
             if unread { throw HTTPConnectionComplete() }
         }
