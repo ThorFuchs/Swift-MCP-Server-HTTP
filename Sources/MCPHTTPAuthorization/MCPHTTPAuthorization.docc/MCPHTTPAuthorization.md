@@ -11,13 +11,16 @@ Credentials never enter provider contexts, logs or continuation state.
 The host owns TLS credentials, verifier cryptography and replay-sensitive application
 policy. Missing credentials, invalid verification and insufficient scopes deny access
 before effects. Operational verifier failures are sanitized and bounded by cancellation.
-Loopback development is an explicit configuration. No authorization server or OAuth
-client is supplied.
+Loopback development is an explicit configuration. This resource-server
+module does not supply an authorization server; the sibling
+MCPClientAuthorization product implements client-side OAuth.
 
 The full consumer uses synthetic TLS inputs and a verifier, checks missing/invalid
 bearer challenges and observes the verified principal in a typed provider. Native
 HTTP tests separately cover scope, expiry, audience, cancellation and redaction.
-These are native local-candidate results; public NIO packaging remains pending.
+Current native qualification uses the released SwiftNIO 2.105.2 dependency.
+The HTTP package remains pre-release; the final Core/HTTP dependency and
+release-platform qualification are separate.
 
 ## Topics
 
