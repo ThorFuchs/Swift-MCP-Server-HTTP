@@ -65,8 +65,15 @@ def parse_reference(data):
     extras = (SCHEMA, *SKILLS)
     require(not set(required) & (set(extras) | A6), 'required/extra overlap')
     require(len(required + list(extras)) == len(set(required + list(extras))), 'duplicate selected scenario')
+    server_records = [(name, reason) for name, leg, reason in records if leg == 'server']
+    require(len(dict(server_records)) == len(server_records), 'duplicate optional server scenario')
+    require(all(reason in ('extension', 'pending') for _, reason in server_records),
+            'unclassified optional server scenario')
+    require(not set(server) & set(dict(server_records)), 'required/optional server overlap')
     return {'required': required, 'server_required': server, 'additional': [SCHEMA],
-            'extensions': list(SKILLS), 'unsupported_a6': sorted(A6)}
+            'extensions': list(SKILLS), 'unsupported_a6': sorted(A6),
+            'server_tasks': [name for name, reason in server_records if reason == 'extension'],
+            'server_pending': [name for name, reason in server_records if reason == 'pending']}
 
 
 def core_revision(lock):
