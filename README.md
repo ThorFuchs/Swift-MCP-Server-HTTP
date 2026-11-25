@@ -10,13 +10,29 @@ plus the client side: `MCPHTTPClient` (Streamable HTTP for `MCPClient`) and
 ## Conformance
 
 `Scripts/conformance.sh` runs the official MCP referee (server leg, requirements 2026-07-28)
-against `Tools/Conformance/SwiftFixture`. Latest local run (2026-11-10, upstream SwiftNIO 2.105.0):
-**37/37 required scenarios passed**; the 3 pending core diagnostics passed; the 10 optional
-Tasks diagnostics fail because Tasks is not supported (not scored).
+against `Tools/Conformance/SwiftFixture`. The H1 integration
+[CI run #64](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/45604079743) on 2026-11-25
+passed **37/37 required and 13/13 implemented extension scenarios** in Debug
+and Release with SwiftNIO 2.105.2. The client gate passed all 37 configured
+scenarios in both modes. Scenario passes are not a claim that every raw
+referee check executed; see the [native qualification review](Docs/Release/H1_SWIFTNIO_RELEASE_QUALIFICATION.md).
+The same CI passed Linux ARM64 optimized compile/link; Linux runtime, AMD64
+and HTTP iOS support are not qualified.
 
 `Scripts/client-conformance.sh` runs the client leg against the client fixture: 37 scenarios,
 including 25 `auth/*` scenarios (discovery, client identity, code flow, `iss`, scopes, step-up,
 `offline_access` and authorization server migration).
+
+## Documentation
+
+- `MCPHTTP`: server transport and host access policy
+- `MCPHTTPAuthorization`: resource-server verification and metadata
+- `MCPHTTPClient`: client transport and credential integration
+- `MCPClientAuthorization`: [OAuth client setup and behavior](Docs/CLIENT_AUTHORIZATION.md)
+
+Each public product has a DocC catalog. Build all four archives with
+`bash Scripts/build-docs.sh` on the supported Swift toolchain.
+The SDK and its Core dependency remain pre-release.
 
 ## Known issues
 
@@ -25,7 +41,10 @@ including 25 `auth/*` scenarios (discovery, client identity, code flow, `iss`, s
   The three native disconnect tests are mandatory, not known-issue allowances.
   See [HTTP #12](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/12)
   for the independent release qualification; the earlier diagnostic proof is not a release result.
-- `swift-http-server` is pinned to a revision (pre-release dependency).
+- `swift-http-server` is pinned to a revision (pre-release dependency);
+  the official 0.5.0 optimized-link qualification remains open.
+- Response-head and static-response write deadline qualification remains open
+  ([#25](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/issues/25)).
 
 ## Third-party directory listing
 
