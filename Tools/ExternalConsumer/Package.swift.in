@@ -1,0 +1,29 @@
+// swift-tools-version:6.4
+// SPDX-License-Identifier: Apache-2.0
+import PackageDescription
+
+// Materialized outside the SDK source tree by qualify-external-consumer.py.
+// Dependencies use remote URLs and the reviewed lock graph, never local paths.
+let package = Package(
+    name: "HTTPExternalConsumer",
+    platforms: [.macOS("27.0")],
+    dependencies: [
+@DEPENDENCIES@
+    ],
+    targets: [
+        .executableTarget(name: "HTTPExternalConsumer", dependencies: [
+            .product(name: "MCPHTTP", package: "swift-mcp-server-http"),
+            .product(name: "MCPHTTPAuthorization", package: "swift-mcp-server-http"),
+            .product(name: "MCPHTTPClient", package: "swift-mcp-server-http"),
+            .product(name: "MCPClientAuthorization", package: "swift-mcp-server-http"),
+            .product(name: "MCPServer", package: "swift-mcp-server"),
+            .product(name: "MCPClient", package: "swift-mcp-server"),
+            .product(name: "MCPProtocol", package: "swift-mcp-server"),
+            .product(name: "JSON", package: "swift-json"),
+            .product(name: "NIOHTTPServer", package: "swift-http-server"),
+            .product(name: "AsyncHTTPClient", package: "async-http-client"),
+            .product(name: "NIOSSL", package: "swift-nio-ssl"),
+        ])
+    ],
+    swiftLanguageModes: [.v6]
+)
