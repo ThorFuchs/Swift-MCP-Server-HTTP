@@ -6,7 +6,7 @@ import Testing
 import JSON
 import MCPProtocol
 import MCPServer
-import MCPHTTP
+@testable import MCPHTTP
 import MCPHTTPAuthorization
 import NIOHTTPServer
 
@@ -25,10 +25,12 @@ private func rpcHTTP(method:String = "tools/list", id:Int = 1, params:String = "
 private func withHTTP(_ server:Server,security:HTTPTransport.Security = .loopbackDevelopment(anonymousHTTP),
     mode:HTTPTransport.ResponseMode = .json, io:Int64 = 5000,drain:Int64 = 100,
     maximumBody:Int = 1_048_576,connections:Int = 8,
+    outputCheckpoint: HTTPOutputCheckpoint? = nil,
     body:@escaping @Sendable (HTTPTransport.Address,HTTPTransport) async throws -> Void) async throws {
     let transport = try HTTPTransport(server:server,configuration:.init(
         admission:HTTPAdmission(maximumBodyBytes:maximumBody),authority:AuthorityPolicy(authorities:["localhost"],origins:["https://allowed.example"]),
         security:security,responseMode:mode,connections:connections,ioMilliseconds:io,drainMilliseconds:drain))
+    if let outputCheckpoint { try await transport.installOutputCheckpoint(outputCheckpoint) }
     let ready = AsyncStream<HTTPTransport.Address>.makeStream(bufferingPolicy:.bufferingNewest(1))
     async let run:Void = runHTTP(transport,ready:ready.continuation)
     var iterator = ready.stream.makeAsyncIterator()
@@ -284,9 +286,115 @@ private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) 
     }
 }
 
+// H4.1 cooperative diagnostic. The real socket is kept unread, but the
+// controlled suspension is at an SDK pre-write checkpoint, not inside NIO.
+private struct OutputCheckpointState: Sendable {
+    var entered = 0
+    var cancelled = 0
+    var exited = 0
+}
+private final class OutputCheckpointGate: Sendable {
+    private let target: HTTPOutputCheckpointPhase
+    private let state = Mutex(OutputCheckpointState())
+    private let stream: AsyncStream<Void>
+    private let continuation: AsyncStream<Void>.Continuation
+
+    init(_ target: HTTPOutputCheckpointPhase) {
+        self.target = target
+        let pair = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        stream = pair.stream
+        continuation = pair.continuation
+    }
+
+    var snapshot: OutputCheckpointState { state.withLock { $0 } }
+
+    func enter(_ phase: HTTPOutputCheckpointPhase) async throws {
+        guard phase == target else { return }
+        let first = state.withLock { value in
+            guard value.entered == 0 else { return false }
+            value.entered = 1
+            return true
+        }
+        guard first else { return } // recovery requests are not held
+        defer { state.withLock { $0.exited += 1 } }
+        do {
+            var iterator = stream.makeAsyncIterator()
+            _ = await iterator.next()
+            try Task.checkCancellation()
+            // The test never signals normal completion. Cleanup must not
+            // accidentally permit the suspended response to be sent.
+            throw CoreFailure.invalidState
+        } catch is CancellationError {
+            state.withLock { $0.cancelled += 1 }
+            throw CancellationError()
+        }
+    }
+
+    // Failure cleanup only, not a passing path.
+    func releaseForCleanup() { continuation.finish() }
+}
+
+private func exerciseHeldOutputCheckpoint(_ phase: HTTPOutputCheckpointPhase) async throws {
+    let core = try await httpCore()
+    let gate = OutputCheckpointGate(phase)
+    try await withHTTP(core, io: 500, connections: 1,
+        outputCheckpoint: { try await gate.enter($0) }) { address, transport in
+        defer { gate.releaseForCleanup() }
+        let socket = try HTTPTestSocket(address, receiveWindow: 1024)
+        defer { socket.closeSocket() }
+
+        switch phase {
+        case .head:
+            try socket.request(rpcHTTP())
+        case .rejection:
+            // Wrong route, before body consumption: ordinary rejection path.
+            try socket.send(Data("GET /not-mcp HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".utf8))
+        case .notification, .metadata:
+            throw CoreFailure.invalidState // separate later cases
+        }
+
+        // Confirm the selected boundary was entered; a timeout or a closed
+        // socket without reaching the checkpoint is not a passing result.
+        try await waitHTTP({ gate.snapshot.entered == 1 }, milliseconds: 5000)
+        do {
+            try await waitHTTP({
+                let c = await core.activity, h = await transport.activity
+                let observed = gate.snapshot
+                return observed.cancelled == 1 && observed.exited == 1
+                    && h.writeTimeouts == 1 && h.connections == 0 && h.requests == 0
+                    && c.active == 0 && c.queued == 0 && c.requests == 0
+                    && c.leases == 0 && c.bufferedBytes == 0 && c.eventBytes == 0
+                    && c.subscriptions == 0 && c.inspections == 0 && c.queuedInspections == 0
+            }, milliseconds: 5000)
+        } catch {
+            let observed = gate.snapshot, h = await transport.activity
+            print("H4_CHECKPOINT phase=\(phase) entered=\(observed.entered) cancelled=\(observed.cancelled) exited=\(observed.exited) timeouts=\(h.writeTimeouts) connections=\(h.connections) requests=\(h.requests)")
+            throw error
+        }
+
+        // No read, client close, or transport shutdown was used to achieve
+        // the preceding cancellation/ownership assertions.
+        #expect(gate.snapshot.cancelled == 1 && gate.snapshot.exited == 1)
+        let recovered = try await curlHTTP(address, data: rpcHTTP(id: 2))
+        #expect(recovered.exit == 0 && recovered.status == 200)
+        #expect(await transport.activity.writeTimeouts == 1)
+        print("H4_CHECKPOINT phase=\(phase) entered=1 cancelled=1 exited=1 timeouts=1 recovered=1")
+    }
+}
+
 // Real listeners share process-global NIO resources; serialize independent cases.
 // Each case still orchestrates its own concurrent requests/cancellation/shutdown.
 @Suite(.serialized) struct NativeHTTPListenerTests {
+    // These are deliberately unmasked RED/GREEN contract tests. H4.1
+    // introduces no timeout implementation; baseline outcome is unobserved.
+    @Test func nativeHTTPHeadCheckpointCancellationAndRecovery() async throws {
+        try await exerciseHeldOutputCheckpoint(.head)
+    }
+
+    @Test func nativeHTTPRejectionCheckpointCancellationAndRecovery() async throws {
+        try await exerciseHeldOutputCheckpoint(.rejection)
+    }
+
     @Test func nativeHTTPListenerJSONAndModernMethodFailures() async throws {
         let core = try await httpCore()
         try await withHTTP(core) { address,_ in
