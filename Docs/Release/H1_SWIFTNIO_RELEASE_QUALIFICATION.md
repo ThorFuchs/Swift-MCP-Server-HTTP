@@ -11,10 +11,16 @@ it was against the upstream merge, not the released tag. Do not count it as H1.
 H1 is based on HTTP main `d2e4cb5a07b4f2453ccd8106d799ca548470c202`.
 Both lockfiles are seeded with the official NIO pin; every other pin, including
 Core branch:main and its recorded revision, must be unchanged. The unverified
-originHash fields are deliberately omitted from the candidate locks. Native
-SwiftPM 6.4.2 must regenerate them. Review and commit those generated lockfiles
-before the final exact-head matrix. Do not promote the seed locks as final
-resolution evidence.
+originHash fields are deliberately omitted from the candidate locks. SwiftPM
+may regenerate them, but the field is optional. In the native 6.4.2 return
+archive `http-h1-540jshab.tar.gz`, both resolves succeeded and both locks
+remained byte-identical to the committed seeds (Git blob
+`41ab82305cb3e38029e26f8e686937aedd5f8f2f`). The initial runner incorrectly
+required the field and stopped after the graph checker passed, before any
+HTTP tests. This is a qualification-harness correction, not a relaxation of
+dependency or HTTP behavioral requirements. Preserve any valid SwiftPM-generated
+origin hashes; never fabricate them. Review any native lockfile changes before
+the final exact-head matrix.
 
 Three existing native disconnect tests are mandatory in Debug and Release.
 The old known-issue scopes are replaced by ordinary do scopes; the assertions,
@@ -32,7 +38,9 @@ parallel on the same physical machine.
 
 Use `focused` instead of `full` to run just the graph and six native tests.
 The runner checks both graphs against the immutable H1 baseline, verifies
-actual NIO/Core checkout HEADs, runs each named test separately and rejects
+all 29 actual checkout HEADs in each of the two workspaces after resolution
+and after each successful test/build stage, records graph receipts (including
+optional originHash), runs each named test separately and rejects
 known-issue results or empty test filters. Full mode then runs Debug SDK,
 Debug server/client referees, optimized libraries and both executable fixtures,
 Release SDK/fixture tests and Release server/client referees.
@@ -45,8 +53,8 @@ described as a green release matrix.
 
 If resolution changes any non-NIO pin, stop and inspect both locks. Do not
 accept a newer mutable Core revision just to obtain a passing result. If the
-runner reports an origin-hash or checkout-layout error, treat that as a setup
-failure, not evidence about TCP behavior. No edits to the normal dependency
+runner reports malformed origin metadata, a missing checkout, or checkout drift,
+treat that as a setup/integrity failure, not evidence about TCP behavior. No edits to the normal dependency
 requirements, tests or timeouts to get the proof green.
 
 ## Release disposition
@@ -60,7 +68,14 @@ requirements, tests or timeouts to get the proof green.
 - Close HTTP #12 only when the real release graph and its acceptance checks
   are integrated. HTTP #13, #25 and #14 remain independent gates.
 
-Authoring host: syntax check and seven synthetic lock acceptance/rejection
-controls passed for the runner. The native HTTP build and actual H1 tests have
-not yet run. No release tag, main merge or issue closure is authorized by this
-document.
+## H1.1 — Runner regression controls
+
+    python3 -I Scripts/test-qualify-h1.py -v
+
+Authoring host: Python syntax check and 10/10 synthetic graph/lock controls
+passed, including rejection of unrelated checkout drift and invalid present
+origin metadata. Both actual archive lockfiles also passed the corrected lock
+validator; Git checkout checks in the synthetic suite use mocks, not native
+SwiftPM repositories. The original native archive establishes dependency
+resolution and graph consistency, but no HTTP tests have run yet. No release
+tag, main merge or issue closure is authorized by this document.
