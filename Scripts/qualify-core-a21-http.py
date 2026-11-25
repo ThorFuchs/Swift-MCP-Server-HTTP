@@ -50,6 +50,18 @@ def capture(args, cwd):
     return subprocess.check_output(args, cwd=cwd, text=True, timeout=60).strip()
 
 
+def verify_disposable_status(checkout, receipt):
+    # Porcelain v1 has significant leading spaces in its two-column XY status.
+    # Keep the raw bytes; reject staged changes, renames, removals and extra paths.
+    status = subprocess.check_output(
+        ['git', 'status', '--porcelain=v1', '--untracked-files=all', '--no-renames'],
+        cwd=checkout, timeout=60)
+    receipt.write_bytes(status)
+    expected = [f' M {path}'.encode('ascii') for path in INPUTS[:4]]
+    need(sorted(status.splitlines()) == sorted(expected),
+         f'unexpected tracked/untracked changes: {status!r}')
+
+
 def audit_records(records, mode, role):
     expected = 53 if role == 'server' else 37
     need(len(records) == expected and len({name for name, _ in records}) == expected, 'scenario inventory differs')
@@ -155,9 +167,7 @@ def qualify(root, runner, checkout, out):
         now = {p:digest(checkout/p) for p in INPUTS}
         put(out/('inputs-'+label+'.json'), now)
         need(now == before, 'dependency byte drift: '+label)
-        status = capture(['git','status','--porcelain'],checkout)
-        (out/('status-'+label+'.txt')).write_text(status+'\n')
-        need(set(x[3:] for x in status.splitlines()) == set(INPUTS[:4]), 'unexpected tracked/untracked changes')
+        verify_disposable_status(checkout, out/('status-'+label+'.txt'))
     integrity('resolved')
     for label, path in [('root',INPUTS[1]),('fixture',INPUTS[3]),('npm',INPUTS[5])]:
         (out/(label+'.before.json')).write_bytes((checkout/path).read_bytes())
