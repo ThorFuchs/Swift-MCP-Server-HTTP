@@ -168,10 +168,14 @@ Passing scenario gates is not equivalent to executing every check.
 - Only close #12 after the release dependency and unmasked tests are integrated
   with admissible CI evidence. Keep diagnostic PR #27 open until then, and
   close it without merging once superseded.
-- H2/#20: this native H1 baseline linked and passed without the ownership patch.
-  Reassess #20 on integrated H1 before accepting its runtime changes. One
-  successful run does not establish that SwiftNIO alone fixed the earlier
-  linker problem.
+- H2/#20 (provenance corrected by the 2026-11-25 reassessment): the ownership
+  v3 correction had already entered main via #23, squash
+  `7287b61910e713b5790f57e111e8d9273f46996c`. H1 qualified that existing
+  implementation without a separate merge of #20. The identical transport
+  blob is `1561da03862e2ccf19264ecba2acd101e70d3eac`. #20 was closed unmerged
+  as superseded. Neither removing the correction nor attributing the earlier
+  linker problem solely to SwiftNIO is supported by H1.
+  See the [H2.1 source review](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/pull/20#issuecomment-7164622997).
 - H3/#21 (official swift-http-server 0.5.0), H4/#25 (head/static writes),
   and H5/H6/#14 remain separate release gates. No Linux runtime support claim,
   Core release authorization, or HTTP RC1 GO follows from this receipt.
