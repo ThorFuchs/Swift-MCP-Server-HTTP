@@ -88,7 +88,11 @@ non-scored policy and positive executed checks. Review the documented
 tasks-status-notifications skip separately: never convert SKIPPED into
 SUCCESS or invent a successful notification test. Preserve warning and
 pending semantics transparently. Do not edit the reference or bypass the
-official referee. This batch does not change the server gate.
+official referee. H5.2 did not change the server gate. H5.3 subsequently
+implemented the independent exact-set validator and replayed the H1 native
+archive; see [H5.3 Server Conformance Gate](H5_SERVER_CONFORMANCE_GATE.md).
+The historical 13/13 extension count is now explicitly separated into
+12 executed passing scenarios and one known upstream skipped scenario.
 
 ## Public SDK surface (source review, not a symbol-graph ABI inventory)
 
@@ -157,5 +161,6 @@ from a Swift library compile alone.
 ## Disposition
 
 H5.2 source audit and client gate implementation complete, pending native
-qualification. H5.3 server gate and API/consumer negative controls next.
+qualification. H5.3 server gate is implemented; API/consumer negative
+controls and fresh native qualification remain next.
 H3/H4/H6 remain independent. No main change, merge, tag or release.
