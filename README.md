@@ -12,9 +12,12 @@ plus the client side: `MCPHTTPClient` (Streamable HTTP for `MCPClient`) and
 `Scripts/conformance.sh` runs the official MCP referee (server leg, requirements 2026-07-28)
 against `Tools/Conformance/SwiftFixture`. The H1 integration
 [CI run #64](https://github.com/ThorFuchs/Swift-MCP-Server-HTTP/actions/runs/45604079743) on 2026-11-25
-passed **37/37 required and 13/13 implemented extension scenarios** in Debug
-and Release with SwiftNIO 2.105.2. The client gate passed all 37 configured
-scenarios in both modes. Scenario passes are not a claim that every raw
+reported **37/37 required and 13/13 implemented extension scenarios** in Debug
+and Release with SwiftNIO 2.105.2. The client logs show all 32 frozen required
+scenarios, one additional JSON Schema diagnostic, and four Skills extensions
+passed in both modes. The six optional A6 scenarios are outside the implemented
+client scope. The extension gate includes a known upstream Tasks check skip.
+Scenario passes are not a claim that every raw
 referee check executed; see the [native qualification review](Docs/Release/H1_SWIFTNIO_RELEASE_QUALIFICATION.md).
 The same CI passed Linux ARM64 optimized compile/link; Linux runtime, AMD64
 and HTTP iOS support are not qualified.
