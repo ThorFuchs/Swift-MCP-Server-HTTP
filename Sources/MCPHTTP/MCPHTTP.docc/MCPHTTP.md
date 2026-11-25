@@ -13,11 +13,12 @@ acknowledged writers. Shutdown stops this listener and drains its own streams;
 parent cancellation joins accepted handlers. Connection, header, body, work and I/O
 ceilings remain independent. There are no legacy sessions, GET streams or replay logs.
 
-Prompt peer cancellation before the first head is qualified on macOS27 with the
-approved one-file NIO candidate. Each consuming host currently declares that local
-candidate explicitly; inheriting the server package's local edge alone was not reliable.
-Public packaging requires an approved upstream fix. The native consumer exercises TLS,
-Host rejection, injected authorization and joined shutdown through this actual API.
+Peer-disconnect cancellation before the first head is qualified on native macOS 27
+with the released SwiftNIO 2.105.2 dependency. The three native disconnect regressions
+are mandatory in Debug and Release. No local dependency edit or fork is required.
+The response-head and static-response write deadlines remain a separate qualification
+gate; passing the body-write tests does not establish those bounds. Native HTTP tests
+exercise TLS, Host rejection, injected authorization and joined shutdown.
 
 ## Topics
 
