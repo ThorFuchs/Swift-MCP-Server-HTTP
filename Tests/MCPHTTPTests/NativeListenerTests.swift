@@ -10,11 +10,6 @@ import MCPHTTP
 import MCPHTTPAuthorization
 import NIOHTTPServer
 
-/// Peer-close (FIN) detection while no read is pending needs SwiftNIO's early EOF delivery,
-/// which upstream SwiftNIO still disables on Darwin. Fixed by apple/swift-nio#3783; remove
-/// these known issues once a SwiftNIO release with that change is required.
-let macOSEarlyEOFKnownIssue: Comment = "Needs SwiftNIO early EOF on macOS 27 (apple/swift-nio#3783)"
-
 private func parseHTTP(_ text:String) throws -> JSON { try JSONParser().parseWithReport(Array(text.utf8)).result }
 private func httpResource(_ name:String) throws -> URL {
     try #require(Bundle.module.url(forResource:name,withExtension:"pem",subdirectory:"Resources"))
@@ -480,7 +475,7 @@ private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) 
     }
 
     @Test func nativeHTTPPeerDisconnectCancelsWithoutProviderCompletion() async throws {
-        await withKnownIssue(macOSEarlyEOFKnownIssue) {
+        do {
         let entered = HTTPCallCounter(),cancelled = HTTPCallCounter()
         let tool = ToolRegistration(definition:try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,_ in
             entered.increment()
@@ -797,7 +792,7 @@ private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) 
     }
 
     @Test func nativeHTTPRepeatedFINReleasesOwnersAndRecovers() async throws {
-        await withKnownIssue(macOSEarlyEOFKnownIssue) {
+        do {
         let entered = HTTPCallCounter(), cancelled = HTTPCallCounter()
         let tool = ToolRegistration(definition: try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,_ in
             entered.increment()
@@ -828,7 +823,7 @@ private func exerciseStalledHTTPWriter(_ lifetime: StalledHTTPProviderLifetime) 
     }
 
     @Test func nativeTLSPeerProcessExitCancelsBeforeResponseHead() async throws {
-        await withKnownIssue(macOSEarlyEOFKnownIssue) {
+        do {
         let entered = HTTPCallCounter(), cancelled = HTTPCallCounter()
         let tool = ToolRegistration(definition: try parseHTTP(#"{"name":"wait","inputSchema":{"type":"object"}}"#)) { _,_ in
             entered.increment()
