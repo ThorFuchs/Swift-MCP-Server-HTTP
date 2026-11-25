@@ -4,10 +4,14 @@
 import copy
 from pathlib import Path
 import runpy
+import subprocess
+import tempfile
 import unittest
 
 runner = runpy.run_path(str(Path(__file__).with_name('qualify-core-a21-http.py')))
 audit = runner['audit_records']
+INPUTS = runner['INPUTS']
+verify_disposable_status = runner['verify_disposable_status']
 S = {'status': 'SUCCESS'}
 SKIP = {'status': 'SKIPPED'}
 WARN = {'id': runner['PROMPT'], 'status': 'WARNING', 'errorMessage': runner['WARNING']}
@@ -68,6 +72,70 @@ class ReceiptControls(unittest.TestCase):
     def test_wrong_skip(self):
         rows = client(); rows[0][1][1]['errorMessage'] = 'unexpected'
         with self.assertRaises(RuntimeError): audit(rows, 'debug', 'client')
+
+
+class WorkingTreeControls(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / 'repo'
+        self.root.mkdir()
+        self.receipt = Path(self.temp.name) / 'status.txt'
+        self.git('init', '-q')
+        self.git('config', 'user.name', 'Harness Test')
+        self.git('config', 'user.email', 'harness@example.invalid')
+        self.git('config', 'commit.gpgsign', 'false')
+        for path in INPUTS:
+            file = self.root / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text('original\n')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'fixture')
+        for path in INPUTS[:4]:
+            (self.root / path).write_text('seeded\n')
+
+    def git(self, *args):
+        return subprocess.check_output(['git', *args], cwd=self.root, timeout=60)
+
+    def reject(self):
+        with self.assertRaisesRegex(RuntimeError, 'unexpected tracked/untracked changes'):
+            verify_disposable_status(self.root, self.receipt)
+        self.assertEqual(self.receipt.read_bytes(), self.git('status', '--porcelain=v1', '--untracked-files=all', '--no-renames'))
+
+    def test_four_unstaged_edits_and_old_parser_reproduction(self):
+        raw = self.git('status', '--porcelain=v1')
+        self.assertTrue(raw.startswith(b' M '))
+        old = raw.decode().strip()
+        self.assertNotEqual({line[3:] for line in old.splitlines()}, set(INPUTS[:4]))
+        verify_disposable_status(self.root, self.receipt)
+        self.assertEqual(self.receipt.read_bytes(), raw)
+
+    def test_extra_tracked_edit(self):
+        (self.root / INPUTS[4]).write_text('unexpected\n')
+        self.reject()
+
+    def test_extra_untracked_path(self):
+        extra = self.root / 'extra directory' / 'unexpected.txt'
+        extra.parent.mkdir()
+        extra.write_text('unexpected\n')
+        self.reject()
+
+    def test_missing_expected_edit(self):
+        (self.root / INPUTS[0]).write_text('original\n')
+        self.reject()
+
+    def test_staged_edit(self):
+        self.git('add', INPUTS[0])
+        self.reject()
+
+    def test_removed_expected_path(self):
+        (self.root / INPUTS[0]).unlink()
+        self.reject()
+
+    def test_untracked_config_cannot_hide_file(self):
+        self.git('config', 'status.showUntrackedFiles', 'no')
+        (self.root / 'unexpected.txt').write_text('unexpected\n')
+        self.reject()
 
 
 if __name__ == '__main__':
