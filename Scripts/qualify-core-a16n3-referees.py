@@ -82,21 +82,45 @@ def run(args, cwd, log, timeout):
     need(rc == 0, f'exit {rc}: {log.name}')
 
 
-def raw_receipt(leg, mode, arm):
-    paths = list((leg / 'results').rglob('checks.json'))
-    need(len(paths) == 1 and paths[0].parent.name.startswith('server-server-stateless-'),
-         'expected one stateless receipt')
-    checks = json.loads(paths[0].read_text())
-    ids = [c['id'] for c in checks]
-    need(len(ids) == len(set(ids)) == 30, 'expected 30 unique checks')
+META_400 = 'sep-2575-http-server-meta-invalid-400'
+META_CASES = {'missing-meta', 'missing-protocol-version', 'missing-client-capabilities'}
+OBSERVATION_WARNING = ('Mutated the prompt list but no notifications/prompts/list_changed '
+                       'arrived on the open subscription stream. This is a SHOULD requirement.')
+
+
+def check_receipt(checks, mode, arm):
+    need(mode in ('debug', 'release') and arm in ('original', 'candidate'), 'unknown leg')
+    need(isinstance(checks, list) and len(checks) == 30, 'expected 30 checks')
+    ids = []
+    meta_cases = []
+    for check in checks:
+        ident = check['id']
+        need(isinstance(ident, str) and bool(ident), 'invalid check ID')
+        if ident == META_400:
+            field = check.get('details', {}).get('fieldIssue')
+            need(field in META_CASES, 'unknown/missing meta-invalid-400 fieldIssue')
+            meta_cases.append(field)
+            ids.append((ident, field))
+        else:
+            ids.append((ident, ''))
+    need(len(meta_cases) == 3 and set(meta_cases) == META_CASES, 'missing/duplicate meta-invalid-400 case')
+    need(len(set(ids)) == 30, 'duplicate check identity')
     warnings = [c for c in checks if c['status'] == 'WARNING']
     need(all(c['status'] in ('SUCCESS', 'WARNING') for c in checks), 'failed/skipped/unknown check')
     if warnings:
         need(mode == 'debug' and arm == 'original' and [c['id'] for c in warnings] == [PROMPT],
              'unexpected warning')
-        need('no notifications/prompts/list_changed arrived' in warnings[0].get('error', ''),
+        need(warnings[0].get('errorMessage') == OBSERVATION_WARNING,
              'not the reproduced observation warning')
+        need(not warnings[0].get('details', {}).get('untestable'), 'mutation was untestable')
     return {'ids': sorted(ids), 'success': 30-len(warnings), 'warnings': [c['id'] for c in warnings]}
+
+
+def raw_receipt(leg, mode, arm):
+    paths = list((leg / 'results').rglob('checks.json'))
+    need(len(paths) == 1 and paths[0].parent.name.startswith('server-server-stateless-'),
+         'expected one stateless receipt')
+    return check_receipt(json.loads(paths[0].read_text()), mode, arm)
 
 
 def case(checkout, fixture, node, bundle, leg):
