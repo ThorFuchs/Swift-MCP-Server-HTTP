@@ -36,6 +36,17 @@ def main():
         if not r.get("revision") or r["revision"] != f.get("revision"):
             raise ValueError(f"root/fixture {identity} revision mismatch: {r} / {f}")
         print(f"{identity} = {r['revision']} ({r.get('version', r.get('branch', 'revision'))})")
+    nio = root["swift-nio"]
+    nio_version = nio.get("version", "")
+    if nio_version != fixture["swift-nio"].get("version"):
+        raise ValueError("root/fixture SwiftNIO version mismatch")
+    parts = nio_version.split(".")
+    if len(parts) != 3 or any(not part.isascii() or not part.isdecimal() for part in parts):
+        raise ValueError(f"SwiftNIO must be a stable semantic version: {nio_version!r}")
+    if not (2, 105, 2) <= tuple(int(part) for part in parts) < (3, 0, 0):
+        raise ValueError("SwiftNIO must include the macOS early-EOF fix (2.105.2+ in 2.x)")
+    if nio_version == "2.105.2" and nio["revision"] != "b003027fc38b649a43e9aad77c3d4e4a2c5b6997":
+        raise ValueError("SwiftNIO 2.105.2 must match the official tag revision")
     if root["swift-http-server"]["revision"] != HTTP_SERVER_SHA:
         raise ValueError("swift-http-server revision unexpectedly changed")
     if root["swift-mcp-server"].get("branch") != "main":
