@@ -157,3 +157,67 @@ integration. release_gate remains NOT_EVALUATED.
 
 No merge, release tag, mutation of either main, final HTTP dependency
 pair admission, AMD64 qualification or #29/#30 closure authorized.
+
+
+## Native A2.2a external receipt — 2026-11-26
+
+Status: **PASS_SCOPED_A22A_HTTP_AND_ADMISSION**, exit 0, release_gate
+NOT_EVALUATED. Maintainer return `core-a22a-http-cwai6ix8.tar.gz`,
+286,860 bytes, SHA-256
+`535a5aaaef0ef97220e32ebb9c8480dd1786f3ccacbe1c8b96f7915561a30273`.
+Original archive opened without extraction: 859 members, 542 regular files.
+Exact runner `595e0efe9c9d2f509d0bc84cf35126693932770a`, Core `cad67fb30817195c868bb45155097b4aeb0a68e5`, tree
+`ef1be9e60e750624549adbaf74078912a4dd9e51`, B3 HTTP
+`c99b65a9ee7879187e6d67e9771b8daa30115502`. Native macOS 27.3 ARM64,
+Swift 6.4.2, Node v24.22.3, npm 11.19.1.
+
+40/40 successful stages; 18 inherited Python, 12 Node, seven inventory
+and six peer controls passed. Independently summed the three raw Swift
+Testing bundle summaries (3+7+33) per mode: 43 functions each; recorded
+parameter inventory and consumer checker confirm 98 cases each.
+Both 14-case Swift overlay logs show exactly the expected callback/verdict
+sequences, one parameterized function passes with all 14 cases, zero exits.
+Each peer records exactly 14 distinct requests, no errors and joined
+supervisor. Original overlay bytes independently hashed from both archive
+members: SHA-256 matches overlay receipts, Git blob
+`b2091e6e901c3c0dab874a421b020020a66b96e7` matches published overlay.
+
+| Leg | Raw scenarios | SUCCESS | WARNING | SKIPPED | INFO | Zero exits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Debug server | 53 | 241 | 1 | 1 | 0 | 4/4 |
+| Debug client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+| Release server | 53 | 242 | 0 | 1 | 0 | 4/4 |
+| Release client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+
+All 180 raw receipt names match the archived exact inventory plan,
+37 required server plus 13 extension and 3 diagnostic names, 32 required
+client plus five supplements, in each mode. Debug inventory compared
+against the actual Core frozen required lists, Release identical.
+All non-skipped scenarios contain executed SUCCESS checks. 1,281 SUCCESS,
+0 FAILURE, one original Debug prompt observation warning, six historical
+skips (Tasks status-notifications and two client headers per mode), 756 INFO.
+No skip scored as success; no warning-free official claim.
+
+Both independent N3.2 raw receipts confirm matching ACK/notification IDs
+13/14 and exact prompt/tool catalog name-set additions, other catalog
+unchanged. Observed prompt/tool ms: Debug 4486.862/4626.114; Release
+457.349/470.977. Diagnostic single observations, not benchmark or isolated
+transport latency. Two streams closed and post-close listings successful
+per mode; all four server logs contain FIXTURE_STOPPED started=2 joined=2
+active=0. N3.2 fresh process exits zero.
+
+12 input-hash maps identical; all 11 graph and status receipts confirm
+only four expected disposable manifest/lock changes, 22 actual Core
+checkout SHA/tree/clean records match. All 29 pin records agree with root
+and fixture lock snapshots; three archived before/after lock pairs
+byte-identical and independently SHA-256 verified against recorded input
+hashes. Runtime fixture and referee digest checks passed; executable and
+bundle bytes omitted from archive, not independently rehashed here.
+Existing HTTP unused dependency/effect-marker and cache diagnostics
+remain visible.
+
+Scoped Core PR #62 external gate satisfied. This is not qualification of
+current HTTP main, general transport cancellation/join/backpressure, or
+native Tasks notification delivery. A2.2b/c/d, platform and API gates
+remain open. No new dependency, production source, or upstream referee
+changes.
