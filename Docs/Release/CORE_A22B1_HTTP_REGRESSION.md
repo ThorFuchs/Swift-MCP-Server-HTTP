@@ -135,3 +135,83 @@ physical cancellation/join, active callback lifetime, reentrancy, remote
 provider teardown, stale wire ID reuse, queue bounds or native Tasks
 notification delivery. A2.2b.2–5, final HTTP dependency pair, AMD64 and
 RC1 remain separate gates. No change to either main, no merge or tag.
+
+
+## Native external regression receipt — 2026-11-27
+
+**PASS_SCOPED_A22B1_HTTP_REGRESSION**, runner exit 0, release_gate
+NOT_EVALUATED. Maintainer archive `core-a22b1-http-fdle_dql.tar.gz`,
+289,695 bytes, SHA-256
+`85ebc483851f19f6a471c2f26ba17ff52c1ea1d1f91abcb9f506716e2c488613`.
+Opened without extraction: 859 unique member names, 542 regular files.
+Exact runner `a9be781d06658e863934865056d34d3ede3a7a0a`; Core
+`5f6892cf9d3f81e1122612e9d3f3066ad0f03a3c`, tree
+`c6b300777f6ba9d4d26c3d88df861a7b56f65c91`; B3 HTTP
+`c99b65a9ee7879187e6d67e9771b8daa30115502`. Native Darwin arm64,
+macOS 27.3, Apple Swift 6.4.2, Node v24.22.3, npm 11.19.1.
+
+All 40 command stages exit 0; raw harness logs confirm 18 Python
+receipt + 12 Node wire + 7 inventory + 6 peer controls pass. Each
+consumer leg has three passing Swift Testing bundle summaries
+(3+7+33=43 functions) and the case receipt confirms all 98 individual
+cases. Both independent admission logs contain exactly one passing
+parameterized function, each of 14 unique expected typed outcomes and
+callback sequences, matching 14 distinct request/filter/ID and offered
+frame receipts, zero peer errors and joined peer. Both archived overlays
+independently SHA-256 verified and Git blob matches
+`b2091e6e901c3c0dab874a421b020020a66b96e7`. Offered frames are not
+independent proof every offered byte reached the client.
+
+| Leg | Raw scenarios | SUCCESS | WARNING | SKIPPED | INFO | Zero exits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Debug server | 53 | 241 | 1 | 1 | 0 | 4/4 |
+| Debug client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+| Release server | 53 | 242 | 0 | 1 | 0 | 4/4 |
+| Release client | 37 | 399 | 0 | 2 | 378 | 37/37 |
+
+All 180 raw scenario names match the exact archived plans; required
+lists agree with frozen Core requirements blob
+`b0c4f8560429e8f4b6c89833cc0b35405bc004ff` and all four prior A2.2a
+inventory groups. Only the historical Tasks notification skip lacks
+a SUCCESS check in each server leg. Total 1,281 SUCCESS, 1 historical
+Debug prompt SHOULD warning, 6 historical skips, 756 INFO, no FAILURE.
+No skip or warning scored as a successful check.
+
+Independent N3.2 native wire receipts: both PASS_N32_WIRE, actual ACK
+and notification IDs 13/14 match, exact dynamic prompt/tool name-set
+additions, other catalog unchanged; two streams closed, post-close
+listings successful and process exit zero per leg. Both receipt fixture
+digests agree with their scored server legs. All four server stderr logs
+record FIXTURE_STOPPED started=2 joined=2 active=0. Diagnostic observed
+prompt/tool times in ms: Debug 4432.691/4629.771, Release
+457.734/470.740. These are single observations measured from mutation
+start, not isolated transport latency or benchmark claims.
+
+All 12 eight-input hash maps identical. Eleven graph verifications
+and 11 raw status receipts pass, exactly four expected disposable
+manifest/lock edits. All 22 actual Core checkout SHA/tree/clean records
+match. Root and fixture before/resolved/after lock snapshots match
+all 29 expected pins; the three before/after lockfile pairs are
+byte-identical and independently hashed against input receipts.
+Independent comparison to original A2.2a archive confirms the only
+changed pin is swift-mcp-server. SwiftJSON 1.9.0 remains pinned.
+Runtime referee/binary digest checks passed; their bytes are not
+archived, not independently rehashed during this review.
+
+Compared normalized raw log warning categories against A2.2a: no new
+category. Existing unused HTTP dependency (8 log lines), unnecessary
+try/effect marker (8 diagnostic lines), and Node DEP0190 (74 lines
+from the client referee) remain at the same counts; the prior Git
+checkout and NIO cache notices do not recur. This is not a warning-free
+build or full security audit.
+
+External HTTP gate for Core PR #63 satisfied. Separate Core
+[optimized CI 45993815310](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/45993815310)
+concluded failure: Linux ARM64 Debug/Release 368/368 each, macOS
+Debug 368/368, macOS Release fixture build aborted on ENOSPC
+(No space left on device) before tests; both six-file dependency
+verifications PASS. Optimized macOS DocC/inventory skipped after
+failure. No successful complete optimized matrix yet. Recover runner
+storage and re-run failed job on exact candidate; preserve failed
+attempt. Merge HOLD until outstanding gate completes and maintainer
+authorizes integration. No changes to Core source or either main.
